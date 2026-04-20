@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -14,8 +14,8 @@ from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.component.postprocess import get_simulation_slice, ranking_slices
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.arc import ARC_BASE, ARC_HYPER
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.arc import ARC_BASE, ARC_HYPER
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	match,

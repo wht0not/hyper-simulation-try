@@ -1,4 +1,4 @@
-import time
+﻿import time
 import os
 from typing import Dict, List, Set, Tuple
 from itertools import product
@@ -22,32 +22,32 @@ def _get_path_description_batch(
     max_paths: int = 1000000,
 ) -> dict[tuple[Vertex, Vertex], str | None]:
     """
-    在整个 hypergraph 上批量获取 (v1, v2) 的路径描述。
+    鍦ㄦ暣涓?hypergraph 涓婃壒閲忚幏鍙?(v1, v2) 鐨勮矾寰勬弿杩般€?
 
-    逻辑与 SemanticCluster 的 group/intersection/within/across 思路一致：
-    1) 按 hyperedge root 的 head 链构建 groups
-    2) 计算 groups 间交集节点
-    3) 组内路径：node -> 最近公共根 -> node
-    4) 组间路径：先走 group 最短路径，再在每跳交集上做组合
-    5) 得到 list[list[Node]] 后转成文本
+    閫昏緫涓?SemanticCluster 鐨?group/intersection/within/across 鎬濊矾涓€鑷达細
+    1) 鎸?hyperedge root 鐨?head 閾炬瀯寤?groups
+    2) 璁＄畻 groups 闂翠氦闆嗚妭鐐?
+    3) 缁勫唴璺緞锛歯ode -> 鏈€杩戝叕鍏辨牴 -> node
+    4) 缁勯棿璺緞锛氬厛璧?group 鏈€鐭矾寰勶紝鍐嶅湪姣忚烦浜ら泦涓婂仛缁勫悎
+    5) 寰楀埌 list[list[Node]] 鍚庤浆鎴愭枃鏈?
 
-    性能：
-    - 使用函数内结构化缓存（group/交集/LCA/group shortest path）
-    - 先用 bounded 最短 hyperpath 做 hops 过滤
+    鎬ц兘锛?
+    - 浣跨敤鍑芥暟鍐呯粨鏋勫寲缂撳瓨锛坓roup/浜ら泦/LCA/group shortest path锛?
+    - 鍏堢敤 bounded 鏈€鐭?hyperpath 鍋?hops 杩囨护
     """
     if not pairs:
         return {}
     if hops < 0:
         return {pair: None for pair in pairs}
 
-    # 函数内结构化缓存
+    # 鍑芥暟鍐呯粨鏋勫寲缂撳瓨
     desc_cache: dict[tuple[int, int, int], str | None] = {}
     pair_lca_cache: dict[tuple[int, int], Node | None] = {}
 
-    # 去重 pairs，避免重复计算
+    # 鍘婚噸 pairs锛岄伩鍏嶉噸澶嶈绠?
     unique_pairs = list(dict.fromkeys(pairs))
 
-    # 先命中缓存（当前调用内）
+    # 鍏堝懡涓紦瀛橈紙褰撳墠璋冪敤鍐咃級
     result: dict[tuple[Vertex, Vertex], str | None] = {}
     uncached_pairs: list[tuple[Vertex, Vertex]] = []
     for v1, v2 in unique_pairs:
@@ -60,11 +60,11 @@ def _get_path_description_batch(
         else:
             uncached_pairs.append((v1, v2))
 
-    # ---------- 0) 批量 hops 过滤（按经过 hyperedge 数） ----------
+    # ---------- 0) 鎵归噺 hops 杩囨护锛堟寜缁忚繃 hyperedge 鏁帮級 ----------
     shortest_map = find_shortest_hyperpaths_local_bounded(hypergraph, uncached_pairs, hops) if uncached_pairs else {}
 
-    # ---------- 1) 构建 hyperedge groups（按 founder 分组） ----------
-    # founder 定义：从 root.current_node 一直沿 head 向上，直到 None 或 self-loop 停止。
+    # ---------- 1) 鏋勫缓 hyperedge groups锛堟寜 founder 鍒嗙粍锛?----------
+    # founder 瀹氫箟锛氫粠 root.current_node 涓€鐩存部 head 鍚戜笂锛岀洿鍒?None 鎴?self-loop 鍋滄銆?
     founder_cache: dict[Node, Node] = {}
 
     def find_founder(node: Node | None) -> Node | None:
@@ -93,7 +93,7 @@ def _get_path_description_batch(
                 return founder
             cur = nxt
 
-        # 遇到环时，回退为当前节点作为 founder，避免无限循环。
+        # 閬囧埌鐜椂锛屽洖閫€涓哄綋鍓嶈妭鐐逛綔涓?founder锛岄伩鍏嶆棤闄愬惊鐜€?
         founder = cur if cur is not None else node
         for p in path:
             founder_cache[p] = founder
@@ -115,7 +115,7 @@ def _get_path_description_batch(
         for he in group:
             he_to_group[he] = gi
 
-    # 每个 group 的节点集合缓存
+    # 姣忎釜 group 鐨勮妭鐐归泦鍚堢紦瀛?
     group_nodes: list[set] = []
     for group in groups:
         nodes = set()
@@ -126,7 +126,7 @@ def _get_path_description_batch(
                     nodes.add(nn)
         group_nodes.append(nodes)
 
-    # ---------- 辅助：组内路径 ----------
+    # ---------- 杈呭姪锛氱粍鍐呰矾寰?----------
     ancestor_chain_cache: dict[Node, tuple[list[Node], set[Node]]] = {}
 
     def get_ancestor_chain_and_set(node: Node) -> tuple[list[Node], set[Node]]:
@@ -229,7 +229,7 @@ def _get_path_description_batch(
         tail = list(reversed(path_b[:-1]))
         return path_a + tail
 
-    # ---------- 3) 批量生成 list[list[Node]] 并转文本 ----------
+    # ---------- 3) 鎵归噺鐢熸垚 list[list[Node]] 骞惰浆鏂囨湰 ----------
     for v1, v2 in uncached_pairs:
         key = (v1.id, v2.id, hops)
 
@@ -248,8 +248,8 @@ def _get_path_description_batch(
 
         all_segment_paths: list[list[list[Node]]] = []
 
-        # 仅基于 shortest_hyperedges 的有序序列构造路径。
-        # 将其切成连续的 group 段：[(gid, [he...]), ...]
+        # 浠呭熀浜?shortest_hyperedges 鐨勬湁搴忓簭鍒楁瀯閫犺矾寰勩€?
+        # 灏嗗叾鍒囨垚杩炵画鐨?group 娈碉細[(gid, [he...]), ...]
         segments: list[tuple[int, list[Hyperedge]]] = []
         valid_shortest = True
         for he in shortest_hyperedges:
@@ -289,8 +289,8 @@ def _get_path_description_batch(
                 nodes.append(nn)
             return nodes
 
-        # 特殊情况：只有一个 segment 时（单 hops 情况）
-        # 直接在该 group 内寻找路径，无需段间连接
+        # 鐗规畩鎯呭喌锛氬彧鏈変竴涓?segment 鏃讹紙鍗?hops 鎯呭喌锛?
+        # 鐩存帴鍦ㄨ group 鍐呭鎵捐矾寰勶紝鏃犻渶娈甸棿杩炴帴
         
         # print segments for debugging
         # print(f"Segments for pair ({v1.text()}, {v2.text()}):")
@@ -307,14 +307,14 @@ def _get_path_description_batch(
                 result[(v1, v2)] = None
                 continue
             
-            # 尝试所有组合
+            # 灏濊瘯鎵€鏈夌粍鍚?
             for start_node in start_candidates:
                 for end_node in end_candidates:
                     seg_path = within_group_path(start_node, end_node, gid)
                     if seg_path:
                         all_segment_paths.append([seg_path])
             
-            # 同样处理直连候选
+            # 鍚屾牱澶勭悊鐩磋繛鍊欓€?
             shared_hes = [he for he in shortest_hyperedges if (v1 in he.vertices and v2 in he.vertices)]
             for he in shared_hes:
                 n1_direct = he.current_node(v1)
@@ -333,7 +333,7 @@ def _get_path_description_batch(
                 result[(v1, v2)] = None
                 continue
         else:
-            # 多 segment 情况：计算相邻段交集
+            # 澶?segment 鎯呭喌锛氳绠楃浉閭绘浜ら泦
             connector_lists: list[list[Node]] = []
             segment_node_sets = [unique_nodes_from_segment(seg_edges) for _, seg_edges in segments]
             
@@ -351,7 +351,7 @@ def _get_path_description_batch(
                 result[(v1, v2)] = None
                 continue
 
-            # 多segment情况的start/end候选
+            # 澶歴egment鎯呭喌鐨剆tart/end鍊欓€?
             start_candidates = vertex_nodes_in_segment(v1, segments[0][1])
             end_candidates = vertex_nodes_in_segment(v2, segments[-1][1])
             if not start_candidates or not end_candidates:
@@ -361,7 +361,7 @@ def _get_path_description_batch(
 
             connector_combos = list(product(*connector_lists)) if connector_lists else [()]
 
-            # 一跳直连候选优先保留（仍只来源于 shortest_hyperedges）
+            # 涓€璺崇洿杩炲€欓€変紭鍏堜繚鐣欙紙浠嶅彧鏉ユ簮浜?shortest_hyperedges锛?
             shared_hes = [he for he in shortest_hyperedges if (v1 in he.vertices and v2 in he.vertices)]
             for he in shared_hes:
                 n1_direct = he.current_node(v1)
@@ -415,7 +415,7 @@ def _get_path_description_batch(
         shortest_paths = [p for p in all_segment_paths if candidate_node_cost(p) == min_cost]
         best_segments = shortest_paths[0]
 
-        # 统一按 node.index 排序，保证 (v,v') 与 (v',v) 的描述构造一致
+        # 缁熶竴鎸?node.index 鎺掑簭锛屼繚璇?(v,v') 涓?(v',v) 鐨勬弿杩版瀯閫犱竴鑷?
         best_nodes = [n for seg in best_segments for n in seg if getattr(n, "text", None)]
         best_nodes = sorted(best_nodes, key=lambda n: n.index)
         desc = " ".join(n.text for n in best_nodes)
@@ -424,7 +424,7 @@ def _get_path_description_batch(
         desc_cache[key] = desc if desc else None
         result[(v1, v2)] = desc_cache[key]
 
-    # 补齐重复输入 pair 的返回
+    # 琛ラ綈閲嶅杈撳叆 pair 鐨勮繑鍥?
     return {pair: result.get(pair) for pair in pairs}
 
 def post_detection(
@@ -435,23 +435,23 @@ def post_detection(
     require_all_neighbors: bool = False,
 ) -> list[tuple[Vertex, Vertex]]:
     """
-    对 simulation 进行后处理检查和构造一致性下的映射。
+    瀵?simulation 杩涜鍚庡鐞嗘鏌ュ拰鏋勯€犱竴鑷存€т笅鐨勬槧灏勩€?
     
-     参数：
+     鍙傛暟锛?
      - require_all_neighbors: bool
-        * False (默认): 对于(u, v) in match，针对任意同边邻接点 u'：
-                   若存在 (u', _) in match，则必须存在 (u', v') in match
-                   且 (u, u') 与 (v, v') 匹配；否则删除(u, v)
-        * True: 对于(u, v) in match，u 在边中的所有邻接节点 u' 都必须有 (u', _) in match，
-                  否则删除(u, v)
+        * False (榛樿): 瀵逛簬(u, v) in match锛岄拡瀵逛换鎰忓悓杈归偦鎺ョ偣 u'锛?
+                   鑻ュ瓨鍦?(u', _) in match锛屽垯蹇呴』瀛樺湪 (u', v') in match
+                   涓?(u, u') 涓?(v, v') 鍖归厤锛涘惁鍒欏垹闄?u, v)
+        * True: 瀵逛簬(u, v) in match锛寀 鍦ㄨ竟涓殑鎵€鏈夐偦鎺ヨ妭鐐?u' 閮藉繀椤绘湁 (u', _) in match锛?
+                  鍚﹀垯鍒犻櫎(u, v)
     
-     步骤：
-     1) 枚举 query 超边内的节点对 (u, u')
-         - 如果 (u, v), (u', v') 都在 simulation，获取它们的描述
-         - 用 NLI 检查 (u, u') 描述 和 (v, v') 描述是否不矛盾
-         - 记录匹配关系
-     2) 初始化 match = simulation
-     3) 进行不动点计算（根据 require_all_neighbors 选择策略）
+     姝ラ锛?
+     1) 鏋氫妇 query 瓒呰竟鍐呯殑鑺傜偣瀵?(u, u')
+         - 濡傛灉 (u, v), (u', v') 閮藉湪 simulation锛岃幏鍙栧畠浠殑鎻忚堪
+         - 鐢?NLI 妫€鏌?(u, u') 鎻忚堪 鍜?(v, v') 鎻忚堪鏄惁涓嶇煕鐩?
+         - 璁板綍鍖归厤鍏崇郴
+     2) 鍒濆鍖?match = simulation
+     3) 杩涜涓嶅姩鐐硅绠楋紙鏍规嵁 require_all_neighbors 閫夋嫨绛栫暐锛?
     """
     if not simulation:
         return []
@@ -464,11 +464,11 @@ def post_detection(
     }
     trace_causal = os.environ.get("POSTPROCESS_TRACE_CAUSAL", "0") not in {"0", "", "false", "False"}
     
-    # 初始化
+    # 鍒濆鍖?
     filtered_simulation = [(u, v) for u, v in simulation if u is not None and v is not None]
     match: set[tuple[Vertex, Vertex]] = set(filtered_simulation)
 
-    # 初始 simulation 的多值索引：u -> {v1, v2, ...}
+    # 鍒濆 simulation 鐨勫鍊肩储寮曪細u -> {v1, v2, ...}
     simulation_by_u: dict[Vertex, set[Vertex]] = {}
     for u, v in filtered_simulation:
         simulation_by_u.setdefault(u, set()).add(v)
@@ -482,9 +482,9 @@ def post_detection(
         v_text = v.text().strip().lower()
         return u_text in debug_focus or v_text in debug_focus
     
-    # -------- 第一阶段：枚举 query 超边，验证一致性 --------
-    # 收集所有在超边内配对且都在 simulation 中的四元组 (u, u', v, v')
-    # 同时构建邻接关系：每个节点在 query 超边中的邻接节点
+    # -------- 绗竴闃舵锛氭灇涓?query 瓒呰竟锛岄獙璇佷竴鑷存€?--------
+    # 鏀堕泦鎵€鏈夊湪瓒呰竟鍐呴厤瀵逛笖閮藉湪 simulation 涓殑鍥涘厓缁?(u, u', v, v')
+    # 鍚屾椂鏋勫缓閭绘帴鍏崇郴锛氭瘡涓妭鐐瑰湪 query 瓒呰竟涓殑閭绘帴鑺傜偣
     edge_neighbors: dict[Vertex, set[Vertex]] = {}
     uu_vv_quads: list[tuple[Vertex, Vertex, Vertex, Vertex]] = []
     uu_desc_cache: dict[tuple[int, int], str] = {}
@@ -568,7 +568,7 @@ def post_detection(
             return None
 
         seq = p1 + list(reversed(p2[:-1]))
-        # 统一按 node.index 排序，保证 (u,u') 与 (u',u) 生成相同描述
+        # 缁熶竴鎸?node.index 鎺掑簭锛屼繚璇?(u,u') 涓?(u',u) 鐢熸垚鐩稿悓鎻忚堪
         seq = sorted(seq, key=lambda n: n.index)
         tokens = [_render_query_node_text(n) for n in seq]
         desc = " ".join(t for t in tokens if t)
@@ -576,14 +576,14 @@ def post_detection(
     
     for he in query.hyperedges:
         vertices = list(he.vertices)
-        # 构建邻接关系
+        # 鏋勫缓閭绘帴鍏崇郴
         for v in vertices:
             if v not in edge_neighbors:
                 edge_neighbors[v] = set()
             for v_other in vertices:
                 if v_other != v:
                     edge_neighbors[v].add(v_other)
-        # 收集四元组（支持同一 u 的多目标映射）
+        # 鏀堕泦鍥涘厓缁勶紙鏀寔鍚屼竴 u 鐨勫鐩爣鏄犲皠锛?
         for i in range(len(vertices)):
             for j in range(i + 1, len(vertices)):
                 u, u_prime = vertices[i], vertices[j]
@@ -602,16 +602,16 @@ def post_detection(
                     for v_prime in v_prime_set:
                         uu_vv_quads.append((u, u_prime, v, v_prime))
     
-    # 对于每个四元组，获取 (v, v') 的路径描述，进行 NLI 检查
-    # 记录 (u, u') 可接受的 (v, v')：label != contradiction
+    # 瀵逛簬姣忎釜鍥涘厓缁勶紝鑾峰彇 (v, v') 鐨勮矾寰勬弿杩帮紝杩涜 NLI 妫€鏌?
+    # 璁板綍 (u, u') 鍙帴鍙楃殑 (v, v')锛歭abel != contradiction
     uu_to_vv_match: dict[tuple[Vertex, Vertex], set[tuple[Vertex, Vertex]]] = {}
     
     def _truncate_desc_between_vertices(desc: str, v: Vertex, v_prime: Vertex) -> str | None:
         """
-        在描述文本中查找 v 和 v_prime，若两者都存在，则截断：
-        - 删去 v 第一次出现的左侧部分
-        - 删去 v_prime 最后一次出现的右侧部分
-        保留中间部分以减少噪声对 NLI 的影响。
+        鍦ㄦ弿杩版枃鏈腑鏌ユ壘 v 鍜?v_prime锛岃嫢涓よ€呴兘瀛樺湪锛屽垯鎴柇锛?
+        - 鍒犲幓 v 绗竴娆″嚭鐜扮殑宸︿晶閮ㄥ垎
+        - 鍒犲幓 v_prime 鏈€鍚庝竴娆″嚭鐜扮殑鍙充晶閮ㄥ垎
+        淇濈暀涓棿閮ㄥ垎浠ュ噺灏戝櫔澹板 NLI 鐨勫奖鍝嶃€?
         """
         if not desc:
             return None
@@ -622,37 +622,37 @@ def post_detection(
         if not v_text or not v_prime_text or v_text == v_prime_text:
             return desc
         
-        # 找 v_text 第一次出现的位置
+        # 鎵?v_text 绗竴娆″嚭鐜扮殑浣嶇疆
         first_v_pos = desc.find(v_text)
         if first_v_pos == -1:
             return desc
         
-        # 找 v_prime_text 最后一次出现的位置
+        # 鎵?v_prime_text 鏈€鍚庝竴娆″嚭鐜扮殑浣嶇疆
         last_v_prime_pos = desc.rfind(v_prime_text)
         if last_v_prime_pos == -1:
             return desc
         
-        # 如果 v 在 v_prime 之后，无法截断，返回原值
+        # 濡傛灉 v 鍦?v_prime 涔嬪悗锛屾棤娉曟埅鏂紝杩斿洖鍘熷€?
         if first_v_pos >= last_v_prime_pos:
             return desc
         
-        # 截断：从 v_text 开始到 v_prime_text 结束
+        # 鎴柇锛氫粠 v_text 寮€濮嬪埌 v_prime_text 缁撴潫
         truncated = desc[first_v_pos:last_v_prime_pos + len(v_prime_text)]
         return truncated if truncated else desc
     
     if uu_vv_quads:
-        # 获取所有 (v, v') 的路径描述
+        # 鑾峰彇鎵€鏈?(v, v') 鐨勮矾寰勬弿杩?
         v_v_pairs = [(quad[2], quad[3]) for quad in uu_vv_quads]
         path_descs = _get_path_description_batch(data, v_v_pairs, hops)
-        # 构造 NLI 检查的文本对（4 种组合：原构造×2方向 + 截断构造×2方向）
-        nli_pairs_list: list[tuple[str, str, str, str, int, int]] = []  # 4 个 desc + 两个 quad indices
+        # 鏋勯€?NLI 妫€鏌ョ殑鏂囨湰瀵癸紙4 绉嶇粍鍚堬細鍘熸瀯閫犆?鏂瑰悜 + 鎴柇鏋勯€犆?鏂瑰悜锛?
+        nli_pairs_list: list[tuple[str, str, str, str, int, int]] = []  # 4 涓?desc + 涓や釜 quad indices
         valid_quads: list[tuple[Vertex, Vertex, Vertex, Vertex]] = []
         valid_quad_keys: list[tuple[int, int, int, int]] = []
         
         for u, u_prime, v, v_prime in uu_vv_quads:
-            # (u, u') 仅使用 query 超边路径描述；无法构造时跳过该四元组
+            # (u, u') 浠呬娇鐢?query 瓒呰竟璺緞鎻忚堪锛涙棤娉曟瀯閫犳椂璺宠繃璇ュ洓鍏冪粍
             uu_desc = uu_desc_cache.get(_uu_cache_key(u, u_prime))
-            # (v, v') 的描述从路径获取
+            # (v, v') 鐨勬弿杩颁粠璺緞鑾峰彇
             vv_desc_original = path_descs.get((v, v_prime))
 
             qkey = _quad_key(u, u_prime, v, v_prime)
@@ -670,7 +670,7 @@ def post_detection(
                 continue
 
             if uu_desc is not None and vv_desc_original is not None:
-                # 生成截断版本
+                # 鐢熸垚鎴柇鐗堟湰
                 vv_desc_truncated = _truncate_desc_between_vertices(vv_desc_original, v, v_prime)
                 if vv_desc_truncated is None:
                     vv_desc_truncated = vv_desc_original
@@ -680,20 +680,20 @@ def post_detection(
                 valid_quads.append((u, u_prime, v, v_prime))
                 valid_quad_keys.append(qkey)
         
-        # 获取 NLI 标签：4 种组合 (原构造×2方向 + 截断构造×2方向)
+        # 鑾峰彇 NLI 鏍囩锛? 绉嶇粍鍚?(鍘熸瀯閫犆?鏂瑰悜 + 鎴柇鏋勯€犆?鏂瑰悜)
         if nli_pairs_list:
             nli_pairs: list[tuple[str, str]] = []
             nli_pair_to_quad_idx: list[tuple[int, str]] = []  # (quad_idx, desc_type)
             
             for vv_orig, uu_desc, vv_trunc, _, quad_idx, _ in nli_pairs_list:
-                # 原构造：A->B 和 B->A
+                # 鍘熸瀯閫狅細A->B 鍜?B->A
                 nli_pairs.append((vv_orig, uu_desc))
                 nli_pair_to_quad_idx.append((quad_idx, "original_ab"))
                 
                 nli_pairs.append((uu_desc, vv_orig))
                 nli_pair_to_quad_idx.append((quad_idx, "original_ba"))
                 
-                # 截断构造：A->B 和 B->A
+                # 鎴柇鏋勯€狅細A->B 鍜?B->A
                 nli_pairs.append((vv_trunc, uu_desc))
                 nli_pair_to_quad_idx.append((quad_idx, "truncated_ab"))
                 
@@ -702,14 +702,14 @@ def post_detection(
 
             labels = get_nli_labels_batch(nli_pairs)
             
-            # 按 quad 聚合 4 个标签
+            # 鎸?quad 鑱氬悎 4 涓爣绛?
             quad_idx_to_labels: dict[int, dict[str, str]] = {}
             for pair_idx, (quad_idx, desc_type) in enumerate(nli_pair_to_quad_idx):
                 if quad_idx not in quad_idx_to_labels:
                     quad_idx_to_labels[quad_idx] = {}
                 quad_idx_to_labels[quad_idx][desc_type] = labels[pair_idx]
             
-            # 判断矛盾：4 种都是 contradiction 才认为矛盾
+            # 鍒ゆ柇鐭涚浘锛? 绉嶉兘鏄?contradiction 鎵嶈涓虹煕鐩?
             for idx, (u, u_prime, v, v_prime) in enumerate(valid_quads):
                 qkey = valid_quad_keys[idx]
                 label_dict = quad_idx_to_labels.get(idx, {})
@@ -719,7 +719,7 @@ def post_detection(
                 truncated_ab = label_dict.get("truncated_ab", "unknown")
                 truncated_ba = label_dict.get("truncated_ba", "unknown")
                 
-                # 只有 4 个都是 contradiction，才认为是矛盾
+                # 鍙湁 4 涓兘鏄?contradiction锛屾墠璁や负鏄煕鐩?
                 is_all_contradiction = (
                     original_ab == 'contradiction' and 
                     original_ba == 'contradiction' and 
@@ -739,12 +739,12 @@ def post_detection(
                         "detail": f"original_ab={original_ab}|original_ba={original_ba}|truncated_ab={truncated_ab}|truncated_ba={truncated_ba}",
                     }
 
-            # 按新规则更新 uu_to_vv_match
+            # 鎸夋柊瑙勫垯鏇存柊 uu_to_vv_match
             for idx, (u, u_prime, v, v_prime) in enumerate(valid_quads):
                 qkey = valid_quad_keys[idx]
                 label_dict = quad_idx_to_labels.get(idx, {})
                 
-                # 只要不是全都矛盾，就认为非矛盾
+                # 鍙涓嶆槸鍏ㄩ兘鐭涚浘锛屽氨璁や负闈炵煕鐩?
                 original_ab = label_dict.get("original_ab", "unknown")
                 original_ba = label_dict.get("original_ba", "unknown")
                 truncated_ab = label_dict.get("truncated_ab", "unknown")
@@ -757,7 +757,7 @@ def post_detection(
                     truncated_ba == 'contradiction'
                 )
                 
-                # 记录非矛盾的匹配
+                # 璁板綍闈炵煕鐩剧殑鍖归厤
                 if is_non_contradict:
                     uu_to_vv_match.setdefault((u, u_prime), set()).add((v, v_prime))
                     uu_to_vv_match.setdefault((u_prime, u), set()).add((v_prime, v))
@@ -770,15 +770,15 @@ def post_detection(
                 #         f"[POSTPROCESS DEBUG] NLI 4-way contradiction: ({u.text()}, {u_prime.text()}) <-> ({v.text()}, {v_prime.text()})"
                 #     )
     
-    # -------- 第二阶段：worklist 不动点计算 --------
-    # 仅重检受影响的 u，避免每轮全量扫描 match。
+    # -------- 绗簩闃舵锛歸orklist 涓嶅姩鐐硅绠?--------
+    # 浠呴噸妫€鍙楀奖鍝嶇殑 u锛岄伩鍏嶆瘡杞叏閲忔壂鎻?match銆?
 
-    # u -> 当前仍在 match 中的 (u, v) 集合
+    # u -> 褰撳墠浠嶅湪 match 涓殑 (u, v) 闆嗗悎
     match_by_u: dict[Vertex, set[tuple[Vertex, Vertex]]] = {}
     for u, v in match:
         match_by_u.setdefault(u, set()).add((u, v))
 
-    # 反向邻接：当某个 u 被删时，哪些中心节点会受影响
+    # 鍙嶅悜閭绘帴锛氬綋鏌愪釜 u 琚垹鏃讹紝鍝簺涓績鑺傜偣浼氬彈褰卞搷
     reverse_neighbors: dict[Vertex, set[Vertex]] = {}
     for center_u, neighbors in edge_neighbors.items():
         for neighbor_u in neighbors:
@@ -805,7 +805,7 @@ def post_detection(
             # _print_pair_debug_header(u, v)
 
         if require_all_neighbors:
-            # 模式2：u 的所有同边邻接节点都必须存在 (u', _) in match
+            # 妯″紡2锛歶 鐨勬墍鏈夊悓杈归偦鎺ヨ妭鐐归兘蹇呴』瀛樺湪 (u', _) in match
             for u_neighbor in edge_neighbors.get(u, set()):
                 if not match_by_u.get(u_neighbor):
                     reason: dict[str, object] = {
@@ -826,8 +826,8 @@ def post_detection(
                     return True, reason
             return False, None
 
-        # 模式1：对任意同边邻接点 u'，若存在 (u', _) in match，
-        # 必须存在 v' 使得 (v, v') 与 (u, u') 的关系非矛盾。
+        # 妯″紡1锛氬浠绘剰鍚岃竟閭绘帴鐐?u'锛岃嫢瀛樺湪 (u', _) in match锛?
+        # 蹇呴』瀛樺湪 v' 浣垮緱 (v, v') 涓?(u, u') 鐨勫叧绯婚潪鐭涚浘銆?
         for u_prime in edge_neighbors.get(u, set()):
             u_prime_pairs = match_by_u.get(u_prime)
             if not u_prime_pairs:
@@ -867,13 +867,13 @@ def post_detection(
                 return True, reason
         return False, None
 
-    # 初始将所有可能受约束的 u 入队
+    # 鍒濆灏嗘墍鏈夊彲鑳藉彈绾︽潫鐨?u 鍏ラ槦
     dirty_u: set[Vertex] = set(match_by_u.keys())
     
     while dirty_u:
         to_remove: dict[tuple[Vertex, Vertex], dict[str, object]] = {}
 
-        # 只扫描脏节点对应的映射对
+        # 鍙壂鎻忚剰鑺傜偣瀵瑰簲鐨勬槧灏勫
         for u in dirty_u:
             for pair in list(match_by_u.get(u, set())):
                 pu, pv = pair
@@ -902,7 +902,7 @@ def post_detection(
                 if not match_by_u[u]:
                     del match_by_u[u]
 
-            # 删除 (u, v) 会影响依赖 u 的中心节点；u 自身也可能仍有其它候选需要重检
+            # 鍒犻櫎 (u, v) 浼氬奖鍝嶄緷璧?u 鐨勪腑蹇冭妭鐐癸紱u 鑷韩涔熷彲鑳戒粛鏈夊叾瀹冨€欓€夐渶瑕侀噸妫€
             next_dirty_u.update(reverse_neighbors.get(u, set()))
             if u in match_by_u:
                 next_dirty_u.add(u)
@@ -916,45 +916,45 @@ def post_detection(
 
 def get_simulation_slice(query: LocalHypergraph, data: LocalHypergraph, simulation: list[tuple[Vertex, Vertex]], num: int) -> list[list[tuple[Vertex, Vertex]]]:
     """
-    基于 Vertex 的 provenance 信息，将 simulation 切割为各个原始 hypergraph 下的切片。
+    鍩轰簬 Vertex 鐨?provenance 淇℃伅锛屽皢 simulation 鍒囧壊涓哄悇涓師濮?hypergraph 涓嬬殑鍒囩墖銆?
     
-    u 来自 query（单一来源），v 来自 data（可能属于多个原始 hypergraph）。
-    对于 simulation 中的每个 (u, v) 对，根据 v 的 provenance 确定该对属于哪些原始 hypergraph。
+    u 鏉ヨ嚜 query锛堝崟涓€鏉ユ簮锛夛紝v 鏉ヨ嚜 data锛堝彲鑳藉睘浜庡涓師濮?hypergraph锛夈€?
+    瀵逛簬 simulation 涓殑姣忎釜 (u, v) 瀵癸紝鏍规嵁 v 鐨?provenance 纭畾璇ュ灞炰簬鍝簺鍘熷 hypergraph銆?
     
-    参数：
-    - query: 查询的 LocalHypergraph
-    - data: 数据的 LocalHypergraph
-    - simulation: Vertex 对的匹配列表
-    - num: 原始 hypergraph 的总数量（从1到num）
+    鍙傛暟锛?
+    - query: 鏌ヨ鐨?LocalHypergraph
+    - data: 鏁版嵁鐨?LocalHypergraph
+    - simulation: Vertex 瀵圭殑鍖归厤鍒楄〃
+    - num: 鍘熷 hypergraph 鐨勬€绘暟閲忥紙浠?鍒皀um锛?
     
-    返回：
-    - list[list[tuple[Vertex, Vertex]]]: 长度为 num 的列表，
-      其中索引 i 对应第 (i+1) 个原始 hypergraph 的 simulation 切片
+    杩斿洖锛?
+    - list[list[tuple[Vertex, Vertex]]]: 闀垮害涓?num 鐨勫垪琛紝
+      鍏朵腑绱㈠紩 i 瀵瑰簲绗?(i+1) 涓師濮?hypergraph 鐨?simulation 鍒囩墖
     """
-    # 初始化结果：每个原始 hypergraph 对应一个空列表
+    # 鍒濆鍖栫粨鏋滐細姣忎釜鍘熷 hypergraph 瀵瑰簲涓€涓┖鍒楄〃
     slices = [[] for _ in range(num)]
     
-    # 遍历 simulation 中的每个 (u, v) 对
+    # 閬嶅巻 simulation 涓殑姣忎釜 (u, v) 瀵?
     for u, v in simulation:
         if u is None or v is None:
             continue
         
-        # 获取 v 的 provenance（所属的原始 hypergraph id 集合）
+        # 鑾峰彇 v 鐨?provenance锛堟墍灞炵殑鍘熷 hypergraph id 闆嗗悎锛?
         v_provenance = v.get_provenance()
         
-        # 将该对添加到 v 所属的所有原始 hypergraph 对应的切片中
+        # 灏嗚瀵规坊鍔犲埌 v 鎵€灞炵殑鎵€鏈夊師濮?hypergraph 瀵瑰簲鐨勫垏鐗囦腑
         for hg_id in v_provenance:
-            # hg_id 从1开始，数组索引从0开始，所以需要减1
+            # hg_id 浠?寮€濮嬶紝鏁扮粍绱㈠紩浠?寮€濮嬶紝鎵€浠ラ渶瑕佸噺1
             slices[hg_id - 1].append((u, v))
     
     return slices
 
 def check_slice_consistency(query: LocalHypergraph, simulation_slice: list[tuple[Vertex, Vertex]], vertex_ids: set[int]) -> bool:
     """
-    检查 simulation_slice 中的 (u, v) 对是否满足一致性要求：
-对于 query 中 id 在 vertex_ids 内的每个 vertex u，simulation_slice 中至少存在一个 v 使得 (u, v) 在其中。
+    妫€鏌?simulation_slice 涓殑 (u, v) 瀵规槸鍚︽弧瓒充竴鑷存€ц姹傦細
+瀵逛簬 query 涓?id 鍦?vertex_ids 鍐呯殑姣忎釜 vertex u锛宻imulation_slice 涓嚦灏戝瓨鍦ㄤ竴涓?v 浣垮緱 (u, v) 鍦ㄥ叾涓€?
     
-    返回 True 如果满足一致性
+    杩斿洖 True 濡傛灉婊¤冻涓€鑷存€?
     """
     
     vertex_map: dict[Vertex, set[Vertex]] = {}
@@ -977,20 +977,20 @@ def check_slice_consistency(query: LocalHypergraph, simulation_slice: list[tuple
     return hit_cnt == len(vertex_needs)
 
 def refine_simulation_slices(query: LocalHypergraph, simulation_slices: list[list[tuple[Vertex, Vertex]]], answer: str) -> list[list[tuple[Vertex, Vertex]]]:
-    # 基于 answer 对 simulation_slices 进行进一步过滤
-    # 独立操作每个 slice。
+    # 鍩轰簬 answer 瀵?simulation_slices 杩涜杩涗竴姝ヨ繃婊?
+    # 鐙珛鎿嶄綔姣忎釜 slice銆?
     
     def _match(v_text: str, answer: str) -> bool:
-        # 简单的文本匹配函数，判断 v_text 是否与 answer 匹配
-        # 这里可以使用更复杂的匹配逻辑，例如包含关系、同义词等
+        # 绠€鍗曠殑鏂囨湰鍖归厤鍑芥暟锛屽垽鏂?v_text 鏄惁涓?answer 鍖归厤
+        # 杩欓噷鍙互浣跨敤鏇村鏉傜殑鍖归厤閫昏緫锛屼緥濡傚寘鍚叧绯汇€佸悓涔夎瘝绛?
         return v_text.strip().lower() == answer.strip().lower()
     
     refined_slices: list[list[tuple[Vertex, Vertex]]] = []
     for slice in simulation_slices:
         new_slice: list[tuple[Vertex, Vertex]] = []
-        # 首先检查 slice 内是否有 (u, v) 满足 v.text() 和 answer 匹配
-        # 若存在匹配，则 保留 (u, v), 而删除其他的 (u, _)
-        # 否则不进行修改
+        # 棣栧厛妫€鏌?slice 鍐呮槸鍚︽湁 (u, v) 婊¤冻 v.text() 鍜?answer 鍖归厤
+        # 鑻ュ瓨鍦ㄥ尮閰嶏紝鍒?淇濈暀 (u, v), 鑰屽垹闄ゅ叾浠栫殑 (u, _)
+        # 鍚﹀垯涓嶈繘琛屼慨鏀?
         matched_map: dict[Vertex, Vertex] = {}
         for u, v in slice:
             if v is not None and _match(v.text(), answer):
@@ -1009,17 +1009,17 @@ def refine_simulation_slices(query: LocalHypergraph, simulation_slices: list[lis
 
 def ranking_slices(query: LocalHypergraph, simulation_slices: list[list[tuple[Vertex, Vertex]]], vertex_ids: set[int], k: int) -> list[int]:
     """
-    对 simulation_slices 做 soft ranking。
+    瀵?simulation_slices 鍋?soft ranking銆?
 
-    评分定义（精确整数比较，避免浮点误差）：
+    璇勫垎瀹氫箟锛堢簿纭暣鏁版瘮杈冿紝閬垮厤娴偣璇樊锛夛細
     - score = hit_cnt / len(vertex_needs)
-    - 因为 len(vertex_needs) 对所有 slice 恒定，排序可等价为按 hit_cnt 排序
-    - hit_cnt 为该 slice 中命中的 query 目标顶点数量
-    - vertex_needs 为 query 中 id 在 vertex_ids 内的顶点集合
+    - 鍥犱负 len(vertex_needs) 瀵规墍鏈?slice 鎭掑畾锛屾帓搴忓彲绛変环涓烘寜 hit_cnt 鎺掑簭
+    - hit_cnt 涓鸿 slice 涓懡涓殑 query 鐩爣椤剁偣鏁伴噺
+    - vertex_needs 涓?query 涓?id 鍦?vertex_ids 鍐呯殑椤剁偣闆嗗悎
 
-    返回：
-    - 按得分从高到低排序后的 slice 索引列表
-    - 取前 k 时若截断同分项，则保留所有与第 k 名同分的 slice（可能超过 k）
+    杩斿洖锛?
+    - 鎸夊緱鍒嗕粠楂樺埌浣庢帓搴忓悗鐨?slice 绱㈠紩鍒楄〃
+    - 鍙栧墠 k 鏃惰嫢鎴柇鍚屽垎椤癸紝鍒欎繚鐣欐墍鏈変笌绗?k 鍚嶅悓鍒嗙殑 slice锛堝彲鑳借秴杩?k锛?
     """
     if k <= 0 or not simulation_slices:
         return []
@@ -1036,7 +1036,7 @@ def ranking_slices(query: LocalHypergraph, simulation_slices: list[list[tuple[Ve
             hit_cnt = sum(1 for u in vertex_needs if u in present_u)
         scored_indices.append((idx, hit_cnt))
 
-    # 先按命中数降序，再按 index 升序，保证同分时结果稳定。
+    # 鍏堟寜鍛戒腑鏁伴檷搴忥紝鍐嶆寜 index 鍗囧簭锛屼繚璇佸悓鍒嗘椂缁撴灉绋冲畾銆?
     scored_indices.sort(key=lambda x: (-x[1], x[0]))
 
     if len(scored_indices) <= k:
@@ -1045,3 +1045,4 @@ def ranking_slices(query: LocalHypergraph, simulation_slices: list[list[tuple[Ve
     kth_hit_cnt = scored_indices[k - 1][1]
     return [idx for idx, hit_cnt in scored_indices if hit_cnt >= kth_hit_cnt]
     
+

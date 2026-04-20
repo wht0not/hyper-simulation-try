@@ -1,4 +1,4 @@
-# model_name = 
+﻿# model_name = 
 # mode = 
 # top_n = 10
 # prompt_name = prompt_no_input_retrieval
@@ -22,9 +22,9 @@ from hyper_simulation.question_answer.vmdit.metrics import metric_max_over_groun
 import json
 import ast
 from tqdm import tqdm
-from hyper_simulation.llm.chat_completion import get_invoke, get_generate
+from hyper_simulation.utils.chat_completion import get_invoke, get_generate
 import numpy as np
-# from hyper_simulation.llm.prompt.vmdit import PROMPT_DICT
+# from hyper_simulation.prompt.vmdit import PROMPT_DICT
 
 def get_index_number(l, n, mode):
     result=[]
@@ -37,10 +37,10 @@ def get_index_number(l, n, mode):
     elif mode == 'guass':
         lower, upper = 0, l
         mu, sigma = 0,1
-        # X表示含有最大最小值约束的正态分布
-        # N表示不含最大最小值约束的正态分布
-        X = stats.truncnorm((lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)  # 有区间限制的随机数
-        a = X.rvs(n)  # 取其中的b个数，赋值给a；a为array类型
+        # X琛ㄧず鍚湁鏈€澶ф渶灏忓€肩害鏉熺殑姝ｆ€佸垎甯?
+        # N琛ㄧず涓嶅惈鏈€澶ф渶灏忓€肩害鏉熺殑姝ｆ€佸垎甯?
+        X = stats.truncnorm((lower - mu) / sigma, (upper - mu) / sigma, loc=mu, scale=sigma)  # 鏈夊尯闂撮檺鍒剁殑闅忔満鏁?
+        a = X.rvs(n)  # 鍙栧叾涓殑b涓暟锛岃祴鍊肩粰a锛沘涓篴rray绫诲瀷
         result=[int(i) for i in a]
         while 1:
             x=result[0]
@@ -148,9 +148,9 @@ def main():
 
     # For baseline scripts, we simply load pre-retrieved documents from `retrieval_file` option.
     if args.mode == "retrieval":
-        l = 20  # 总共检索范围
-        n=args.top_n  #检索个数
-        mode = 'guass'  # 正态分布
+        l = 20  # 鎬诲叡妫€绱㈣寖鍥?
+        n=args.top_n  #妫€绱釜鏁?
+        mode = 'guass'  # 姝ｆ€佸垎甯?
         index_number = get_index_number(l, n,mode)
         if args.retrieval_file is not None:
             retrieval_data = load_file(args.retrieval_file)
@@ -314,3 +314,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

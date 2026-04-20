@@ -1,4 +1,4 @@
-import argparse
+﻿import argparse
 import json
 import re
 from pathlib import Path
@@ -11,7 +11,7 @@ from tqdm import tqdm
 from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
-from hyper_simulation.llm.chat_completion import get_invoke
+from hyper_simulation.utils.chat_completion import get_invoke
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	match,
@@ -508,3 +508,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

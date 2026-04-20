@@ -1,4 +1,4 @@
-[workspace]
+﻿[workspace]
 authors = ["RaVincentHuang <18573104293@163.com>"]
 channels = ["conda-forge"]
 name = "hyper-simulation"
@@ -9,14 +9,14 @@ version = "0.1.0"
 # submodule = "git submodule update --recursive --remote --init"
 # simulation = { cmd = "maturin develop", depends-on = ["submodule"], cwd = "simulation" }
 # install = {depends-on = ["simulation"]}
-test_llm = { cmd = "python tests/test_llm.py"}
-gen_emb ={ cmd = "sh scripts/generate_embs.sh"}
-base_line = {cmd = "sh scripts/base_line.sh"}
-cdit ={ cmd = "sh scripts/cdit.sh"}
+test_llm = { cmd = "python tests/unit/test_llm.py"}
+gen_emb ={ cmd = "sh scripts/data/generate_embs.sh"}
+base_line = {cmd = "sh scripts/run/base_line.sh"}
+cdit ={ cmd = "sh scripts/run/cdit.sh"}
 trim = {cmd = "python src/hyper_simulation/question_answer/get_trim.py"}
 analysis = {cmd = "python src/hyper_simulation/question_answer/retrival/analysis.py"}
 time_cost = {cmd = "python src/hyper_simulation/llm/time_cost.py"}
-tool = {cmd = "python tests/test_tool.py"}
+tool = {cmd = "python tests/unit/test_tool.py"}
 show = { cmd = "python src/hyper_simulation/question_answer/utils/show_task.py"}
 rag = { cmd = [
     "python src/hyper_simulation/question_answer/rag.py",
@@ -85,30 +85,30 @@ cupy-cuda12x = ">=13.6.0, <14"
 openai = ">=2.31.0, <3"
 
 [feature.hypergraph.tasks]
-dependency = { cmd = "python tests/test_dependency.py"}
+dependency = { cmd = "python tests/unit/test_dependency.py"}
 build = { cmd = "python src/hyper_simulation/question_answer/rag_no_retrival.py --method hyper_simulation --build" }
 # pixi run -e hypergraph build --data_path /home/vincent/.dataset/HotpotQA/sample1000 --task hotpotqa
 # pixi run -e hypergraph build --data_path /home/vincent/.dataset/musique/sample3000 --task musique
 # pixi run -e hypergraph build --data_path /home/vincent/.dataset/MultiHop/sample2500 --task multihop
 # pixi run -e hypergraph build --data_path /home/vincent/.dataset/ARC/sample_ARC --task ARC
 # pixi run -e hypergraph build --data_path /home/vincent/.dataset/LegalBench/sample500 --task LegalBench
-test_build = { cmd = "python tests/test_hypergrah_gen.py"}
-display = { cmd = "python tests/tools/spacy_debug.py" }
-wordnet = { cmd = "python tests/tools/wordnet_X.py" }
+test_build = { cmd = "python tests/unit/test_hypergrah_gen.py"}
+display = { cmd = "python tests/tools/nlp/spacy_debug.py" }
+wordnet = { cmd = "python tests/tools/nlp/wordnet_X.py" }
 linking = { cmd = "python src/hyper_simulation/hypergraph/linking.py" }
-load = { cmd = "python tests/tools/build.py" }
-musique = { cmd = "python tests/tasks/build_musique.py" }
-hotpotqa = { cmd = "python tests/tasks/build_hotpotqa.py" }
-legalbench = { cmd = "python tests/tasks/build_legalbench.py" }
-multihop = { cmd = "python tests/tasks/build_multihop.py" }
-arc = { cmd = "python tests/tasks/build_arc.py" }
-contract_nli = { cmd = "python tests/tasks/build_contract_nli.py" }
-docnli = { cmd = "python tests/tasks/build_docnli.py" }
-econ = { cmd = "python tests/tasks/build_econ.py" }
-control = { cmd = "python tests/tasks/build_control.py" }
-count ={ cmd = "python tests/tasks/count_tokens.py" }
-split ={ cmd = "python tests/tasks/split_chunk.py" }
-by_token = { cmd = "python tests/tasks/build_by_token_len.py" }
+load = { cmd = "python tests/tools/hypergraph/build.py" }
+musique = { cmd = "python tests/tasks/musique/build_musique.py" }
+hotpotqa = { cmd = "python tests/tasks/hotpotqa/build_hotpotqa.py" }
+legalbench = { cmd = "python tests/tasks/legalbench/build_legalbench.py" }
+multihop = { cmd = "python tests/tasks/multihop/build_multihop.py" }
+arc = { cmd = "python tests/tasks/arc/build_arc.py" }
+contract_nli = { cmd = "python tests/tasks/contract_nli/build_contract_nli.py" }
+docnli = { cmd = "python tests/tasks/docnli/build_docnli.py" }
+econ = { cmd = "python tests/tasks/econ/build_econ.py" }
+control = { cmd = "python tests/tasks/control/build_control.py" }
+count ={ cmd = "python tests/tasks/utils/count_tokens.py" }
+split ={ cmd = "python tests/tasks/utils/split_chunk.py" }
+by_token = { cmd = "python tests/tasks/utils/build_by_token_len.py" }
 
 [feature.simulation.dependencies]
 python = "3.10.*"
@@ -129,8 +129,8 @@ openai = ">=2.30.0, <3"
 faiss-gpu = ">=1.7.0" 
 tiktoken = "*"
 [feature.simulation.tasks]
-pre = { cmd = "python tests/test_hypergraph.py"}
-test_contradoc = { cmd = "python tests/test_contradoc.py" }
+pre = { cmd = "python tests/unit/test_hypergraph.py"}
+test_contradoc = { cmd = "python tests/unit/test_contradoc.py" }
 rag_no_retrival = { cmd = "python src/hyper_simulation/question_answer/rag_no_retrival.py" }
 hyper_simulation = { cmd = "python src/hyper_simulation/question_answer/rag_no_retrival.py --method hyper_simulation --output_path /home/vincent/hyper-simulation/data/hyper_simulation" }
 HotpotQA = {cmd = "python src/hyper_simulation/question_answer/rag_no_retrival.py --data_path /home/vincent/.dataset/HotpotQA/sample1000 --task hotpotqa"}
@@ -144,55 +144,56 @@ LegalBench = {cmd = "python src/hyper_simulation/question_answer/rag_no_retrival
 # LD_LIBRARY_PATH="/home/vincent/hyper-simulation/.pixi/envs/simulation/lib" \
 # pixi run -e simulation hyper_simulation --data_path /home/vincent/.dataset/HotpotQA/sample1000 --task hotpotqa
 # pixi run -e simulation rag_no_retrival --data_path /home/vincent/.dataset/musique/sample50 --output_path data/baseline/contradoc/ --method contradoc --task musique
-test_nli = { cmd = "python tests/tools/nli.py" }
-wordnet = { cmd = "python tests/tools/wordnet_show.py" }
+test_nli = { cmd = "python tests/tools/nlp/nli.py" }
+wordnet = { cmd = "python tests/tools/nlp/wordnet_show.py" }
 linking = { cmd = "python src/hyper_simulation/hypergraph/linking.py" }
-debug = { cmd = "python tests/tools/hyper.py" }
-dump = { cmd = "python tests/tools/dump_hypergraph.py" }
-enrich = { cmd = "python tests/tools/enrich.py" }
-refine = { cmd = "python tests/tools/refine.py" }
-title = { cmd = "python tests/tools/title.py" }
-trans = { cmd = "python tests/tools/title_trans.py" }
-remote = { cmd = "python tests/tasks/refine_hypergraph.py" }
-check = { cmd = "python tests/tasks/support_check.py" }
-migrate = { cmd = "python tests/tasks/migrate_vertex_types.py" }
-decompose = { cmd = "python tests/tasks/decompose_question.py" }
-decompose_multihop ={ cmd = "python tests/tasks/decompose_question_multihop.py" }
-musique = { cmd = "python tests/tasks/musique.py" }
-decompose_check ={ cmd = "python tests/tasks/check_decompose_structure.py" }
-musique_baseline = { cmd = "python tests/tasks/musique_baseline.py" }
-hotpotqa = { cmd = "python tests/tasks/hotpotqa.py" }
-legalbench = { cmd = "python tests/tasks/legalbench.py" }
-legalbench_baseline = { cmd = "python tests/tasks/legalbench_baseline.py" }
-multihop = { cmd = "python tests/tasks/multihop.py" }
+debug = { cmd = "python tests/tools/hypergraph/hyper.py" }
+dump = { cmd = "python tests/tools/hypergraph/dump_hypergraph.py" }
+enrich = { cmd = "python tests/tools/hypergraph/enrich.py" }
+refine = { cmd = "python tests/tools/hypergraph/refine.py" }
+title = { cmd = "python tests/tools/utils/title.py" }
+trans = { cmd = "python tests/tools/utils/title_trans.py" }
+remote = { cmd = "python tests/tasks/hypergraph/refine_hypergraph.py" }
+check = { cmd = "python tests/tasks/utils/support_check.py" }
+migrate = { cmd = "python tests/tasks/migration/migrate_vertex_types.py" }
+decompose = { cmd = "python tests/tasks/utils/decompose_question.py" }
+decompose_multihop ={ cmd = "python tests/tasks/multihop/decompose_question_multihop.py" }
+musique = { cmd = "python tests/tasks/musique/musique.py" }
+decompose_check ={ cmd = "python tests/tasks/utils/check_decompose_structure.py" }
+musique_baseline = { cmd = "python tests/tasks/musique/musique_baseline.py" }
+hotpotqa = { cmd = "python tests/tasks/hotpotqa/hotpotqa.py" }
+legalbench = { cmd = "python tests/tasks/legalbench/legalbench.py" }
+legalbench_baseline = { cmd = "python tests/tasks/legalbench/legalbench_baseline.py" }
+multihop = { cmd = "python tests/tasks/multihop/multihop.py" }
 
-arc_baseline = { cmd = "python tests/tasks/arc_baseline.py" }
-arc = { cmd = "python tests/tasks/arc.py" }
-econ_baseline = { cmd = "python tests/tasks/econ_baseline.py" }
-econ = { cmd = "python tests/tasks/econ.py" }
-docnli_baseline = { cmd = "python tests/tasks/docnli_baseline.py" }
-docnli = { cmd = "python tests/tasks/docnli.py" }
-contract_nli_baseline = { cmd = "python tests/tasks/contra_nli_baseline.py" }
-contract_nli = { cmd = "python tests/tasks/build_contract_nli.py" }
-control = { cmd = "python tests/tasks/control.py" }
-control_baseline = { cmd = "python tests/tasks/control_baseline.py" }
+arc_baseline = { cmd = "python tests/tasks/arc/arc_baseline.py" }
+arc = { cmd = "python tests/tasks/arc/arc.py" }
+econ_baseline = { cmd = "python tests/tasks/econ/econ_baseline.py" }
+econ = { cmd = "python tests/tasks/econ/econ.py" }
+docnli_baseline = { cmd = "python tests/tasks/docnli/docnli_baseline.py" }
+docnli = { cmd = "python tests/tasks/docnli/docnli.py" }
+contract_nli_baseline = { cmd = "python tests/tasks/contract_nli/contra_nli_baseline.py" }
+contract_nli = { cmd = "python tests/tasks/contract_nli/build_contract_nli.py" }
+control = { cmd = "python tests/tasks/control/control.py" }
+control_baseline = { cmd = "python tests/tasks/control/control_baseline.py" }
 
-clean_contract_nli = { cmd = " python tests/tools/clean_contract_nli.py" }
+clean_contract_nli = { cmd = " python tests/tools/dataset_specific/clean_contract_nli.py" }
 
-split ={ cmd = "python tests/tasks/split_chunk.py" }
+split ={ cmd = "python tests/tasks/utils/split_chunk.py" }
 
-musique_time = { cmd = "python tests/tasks/musique_time.py" }
-hotpotqa_time = { cmd = "python tests/tasks/hotpotqa_time.py" }
-control_time = { cmd = "python tests/tasks/control_time.py" }
-econ_time = { cmd = "python tests/tasks/econ_time.py" }
+musique_time = { cmd = "python tests/tasks/musique/musique_time.py" }
+hotpotqa_time = { cmd = "python tests/tasks/hotpotqa/hotpotqa_time.py" }
+control_time = { cmd = "python tests/tasks/control/control_time.py" }
+econ_time = { cmd = "python tests/tasks/econ/econ_time.py" }
 
-by_token = { cmd = "python tests/tasks/by_token_len_simulation.py" }
-musique_split_time = { cmd = "python tests/tasks/musique_split_time.py" }
-contract_nli_split_time = { cmd = "python tests/tasks/contract_nli_split_time.py" }
+by_token = { cmd = "python tests/tasks/utils/by_token_len_simulation.py" }
+musique_split_time = { cmd = "python tests/tasks/musique/musique_split_time.py" }
+contract_nli_split_time = { cmd = "python tests/tasks/contract_nli/contract_nli_split_time.py" }
 
-contradoc_time = { cmd = "python tests/tasks/contradoc_time.py" }
+contradoc_time = { cmd = "python tests/tasks/contract_nli/contradoc_time.py" }
 
 [environments]
 hypergraph = { features = ["hypergraph"] }
 simulation = { features = ["simulation"] }
 default = { features = ["naive"] }
+

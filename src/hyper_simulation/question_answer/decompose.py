@@ -1,10 +1,10 @@
-import json
+﻿import json
 import re
 
 from langchain_ollama import ChatOllama
 
 from hyper_simulation.hypergraph.hypergraph import Hypergraph
-from hyper_simulation.llm.chat_completion import get_invoke, get_generate
+from hyper_simulation.utils.chat_completion import get_invoke, get_generate
 from hyper_simulation.utils.log import getLogger
 
 logger = getLogger(__name__)

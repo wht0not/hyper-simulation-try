@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 import jsonlines
 import argparse
@@ -13,16 +13,16 @@ from hyper_simulation.question_answer.vmdit.metrics import (
 )
 from hyper_simulation.query_instance import QueryInstance
 from hyper_simulation.utils.log import current_task, getLogger
-from hyper_simulation.llm.prompt.musique import MUSIQUE_QA_BASE
+from hyper_simulation.prompt.musique import MUSIQUE_QA_BASE
 
 
 def load_musique_data(file_path: str, use_supporting_only: bool = True) -> List[Dict[str, Any]]:
     """
-    加载 MuSiQue 数据集
+    鍔犺浇 MuSiQue 鏁版嵁闆?
     
     Args:
-        file_path: 数据路径
-        use_supporting_only: 是否只保留支持段落（关键修改！）
+        file_path: 鏁版嵁璺緞
+        use_supporting_only: 鏄惁鍙繚鐣欐敮鎸佹钀斤紙鍏抽敭淇敼锛侊級
     """
     data: List[Dict[str, Any]] = []
     path = Path(file_path)
@@ -58,7 +58,7 @@ def load_musique_data(file_path: str, use_supporting_only: bool = True) -> List[
                             supporting_flags.append(is_supporting)
 
                 if use_supporting_only and len(context) == 0:
-                    print(f"⚠️ Warning: Sample {item.get('id', 'unknown')} has no supporting paragraphs!")
+                    print(f"鈿狅笍 Warning: Sample {item.get('id', 'unknown')} has no supporting paragraphs!")
                     continue
 
                 formatted_item = {
@@ -78,7 +78,7 @@ def load_musique_data(file_path: str, use_supporting_only: bool = True) -> List[
 
 
 def build_prompt(question: str, context_text: str) -> str:
-    """构建 MuSiQue 任务的 prompt"""
+    """鏋勫缓 MuSiQue 浠诲姟鐨?prompt"""
     prompt = f"""Read the following paragraphs carefully and answer the question.
 
 PARAGRAPHS:
@@ -101,7 +101,7 @@ RESPONSE:
 
 
 def evaluate_answer(prediction: str, ground_truth: list | str) -> Dict[str, float]:
-    """评估生成的答案"""
+    """璇勪及鐢熸垚鐨勭瓟妗?""
     if isinstance(ground_truth, list):
         ground_truths = ground_truth
     else:
@@ -122,14 +122,14 @@ def evaluate_answer(prediction: str, ground_truth: list | str) -> Dict[str, floa
 
 
 def postprocess_answer(answer: str) -> str:
-    """后处理 - 提取短答案"""
+    """鍚庡鐞?- 鎻愬彇鐭瓟妗?""
     print(answer)
     if not answer:
         return "unanswerable"
 
     answer = answer.replace("</s>", "").strip()
     
-    # 1. 提取 ANSWER: 后的内容
+    # 1. 鎻愬彇 ANSWER: 鍚庣殑鍐呭
     patterns = [
         r"ANSWER:\s*(.+?)(?:\n|$)",
         r"Answer:\s*(.+?)(?:\n|$)",
@@ -141,7 +141,7 @@ def postprocess_answer(answer: str) -> str:
             answer = match.group(1).strip()
             break
     
-    # 2. 如果答案太长，提取核心实体
+    # 2. 濡傛灉绛旀澶暱锛屾彁鍙栨牳蹇冨疄浣?
     words = answer.split()
     if len(words) > 10:
         quote_match = re.search(r'["\']([^"\']+)["\']', answer)
@@ -154,7 +154,7 @@ def postprocess_answer(answer: str) -> str:
         
         answer = ' '.join(words[:5])
     
-    # 3. 清理常见噪声
+    # 3. 娓呯悊甯歌鍣０
     noise_patterns = [
         r'^The\s+', r'^A\s+', r'^An\s+',
         r'\s+is\s+.*$', r'\s+was\s+.*$', r'\s+are\s+.*$',
@@ -163,14 +163,14 @@ def postprocess_answer(answer: str) -> str:
     for pattern in noise_patterns:
         answer = re.sub(pattern, '', answer, flags=re.IGNORECASE)
     
-    # 4. 去除首尾标点
+    # 4. 鍘婚櫎棣栧熬鏍囩偣
     answer = answer.strip(" .,;:!?\"'()[]")
     
-    # 5. 处理 unanswerable 变体
+    # 5. 澶勭悊 unanswerable 鍙樹綋
     if answer.lower() in ['unanswerable', 'unknown', 'none', 'not mentioned', 'cannot be determined']:
         return "unanswerable"
     
-    # 6. 截断过长答案
+    # 6. 鎴柇杩囬暱绛旀
     if len(answer) > 100:
         answer = answer[:100].rsplit(' ', 1)[0]
     
@@ -187,9 +187,9 @@ def run_rag_evaluation(
     method: str = "vanilla",
     build: bool = True,
     rebuild: bool = False,
-    use_supporting_only: bool = True  # 🔑 新增参数
+    use_supporting_only: bool = True  # 馃攽 鏂板鍙傛暟
 ):
-    """运行 MuSiQue RAG 评估任务"""
+    """杩愯 MuSiQue RAG 璇勪及浠诲姟"""
     print(f"Loading data from {data_path}...")
     print(f"Use supporting paragraphs only: {use_supporting_only}")
     data: List[Dict[str, Any]] = load_musique_data(data_path, use_supporting_only=use_supporting_only)
@@ -198,7 +198,7 @@ def run_rag_evaluation(
     print(f"Initializing LLM: {model_name}")
     
     from langchain_ollama import ChatOllama
-    from hyper_simulation.llm.chat_completion import get_generate
+    from hyper_simulation.utils.chat_completion import get_generate
     model = ChatOllama(
         model=model_name, 
         temperature=temperature, 
@@ -222,13 +222,13 @@ def run_rag_evaluation(
         assert batch_start + batch_size <= len(data) 
         batch = data[batch_start:(batch_start + batch_size)]
         
-        # 构建 QueryInstance
+        # 鏋勫缓 QueryInstance
         query_instances = []
         for item in batch:
             ground_truths = []
             supporting_flags = item.get("supporting_flags", []) or []
             for idx, (title, sentences) in enumerate(item["context"]):
-                # 因为只保留支持段落，这里全部为 True
+                # 鍥犱负鍙繚鐣欐敮鎸佹钀斤紝杩欓噷鍏ㄩ儴涓?True
                 ground_truths.append((True, "\n".join(sentences)))
 
             answer = item.get("answer", "")
@@ -250,7 +250,7 @@ def run_rag_evaluation(
         if method == "vanilla":
             fixed_query_instances = query_instances
         elif method == "contradoc":
-            # 使用Contradoc方法修正数据
+            # 浣跨敤Contradoc鏂规硶淇鏁版嵁
             from hyper_simulation.baselines.contradoc import query_fixup
             fixed_query_instances = [
                 query_fixup(qi, model=model) for qi in query_instances
@@ -266,7 +266,7 @@ def run_rag_evaluation(
         else:
             raise ValueError(f"Unsupported method: {method}")
         
-        # 准备 prompts
+        # 鍑嗗 prompts
         prompts = []
         for item in fixed_query_instances:
             context_text = "\n\n".join(item.fixed_data if item.fixed_data else item.data)
@@ -275,7 +275,7 @@ def run_rag_evaluation(
         
         predictions = get_generate(prompts, model)
         
-        # 后处理和评估
+        # 鍚庡鐞嗗拰璇勪及
         for item, pred in zip(fixed_query_instances, predictions):
             processed_pred = postprocess_answer(pred)
             metrics = evaluate_answer(processed_pred, item.answers)
@@ -290,13 +290,13 @@ def run_rag_evaluation(
             for metric_name, score in metrics.items():
                 all_metrics[metric_name].append(score)
     
-    # 计算平均指标
+    # 璁＄畻骞冲潎鎸囨爣
     avg_metrics = {
         metric_name: sum(scores) / len(scores) if scores else 0
         for metric_name, scores in all_metrics.items()
     }
     
-    # 打印结果
+    # 鎵撳嵃缁撴灉
     print("\n" + "="*60)
     print("Evaluation Results:")
     print("="*60)
@@ -306,11 +306,11 @@ def run_rag_evaluation(
     print(f"Match Score: {avg_metrics['match']:.4f}")
     print("="*60)
     
-    # 统计 unanswerable 比例
+    # 缁熻 unanswerable 姣斾緥
     unanswerable_count = sum(1 for r in results if r['prediction'].lower() == 'unanswerable')
     print(f"Unanswerable predictions: {unanswerable_count}/{len(results)} ({unanswerable_count/len(results)*100:.1f}%)")
 
-    # 保存结果
+    # 淇濆瓨缁撴灉
     if output_path:
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)

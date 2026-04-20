@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -15,8 +15,8 @@ from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.component.postprocess import get_simulation_slice, ranking_slices
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.multihop import (
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.multihop import (
 	MULTIHOP_QA_HYPER,
 	MULTIHOP_QA_HYPER_FINAL,
 	MULTIHOP_QA_HYPER_SUB,
@@ -673,3 +673,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

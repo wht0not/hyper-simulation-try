@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -14,8 +14,8 @@ from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.component.postprocess import get_simulation_slice, ranking_slices
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.hotpot_qa import HOTPOT_QA_HYPER
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.hotpot_qa import HOTPOT_QA_HYPER
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	metric_max_over_ground_truths,
@@ -192,7 +192,7 @@ def _build_context_block(
 ) -> tuple[list[int], list[int], str]:
 	ranked_slice_indices = ranking_slices(query, simulation_slices, vertex_ids, k=k)
 
-	# 仅在 HotpotQA 本地做同分 tie-break：supporting_facts 命中的 slice 优先。
+	# 浠呭湪 HotpotQA 鏈湴鍋氬悓鍒?tie-break锛歴upporting_facts 鍛戒腑鐨?slice 浼樺厛銆?
 	preferred_slice_indices = preferred_slice_indices or set()
 	vertex_needs: set[Vertex] = {u for u in query.vertices if u.id in vertex_ids}
 	slice_hit_cnt: dict[int, int] = {}
@@ -221,10 +221,10 @@ def _build_context_block(
 
 def _extract_preferred_slice_indices(item: dict[str, Any], evidence_items: list[dict[str, Any]]) -> set[int]:
 	"""
-	从 supporting_facts 中提取优先切片索引。
-	优先规则：
-	1) supporting_facts.sent_id 命中 evidence index
-	2) supporting_facts.title 命中 evidence title
+	浠?supporting_facts 涓彁鍙栦紭鍏堝垏鐗囩储寮曘€?
+	浼樺厛瑙勫垯锛?
+	1) supporting_facts.sent_id 鍛戒腑 evidence index
+	2) supporting_facts.title 鍛戒腑 evidence title
 	"""
 	supporting_facts = item.get("supporting_facts")
 	if not isinstance(supporting_facts, dict):
@@ -488,3 +488,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

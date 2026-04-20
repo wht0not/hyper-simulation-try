@@ -1,28 +1,28 @@
-# coding: utf-8
-from src.prompt.hotpot_qa import HOTPOT_QA_BASE
-from src.prompt.musique import MUSIQUE_QA_BASE
-from src.prompt.multihop import MULTIHOP_QA_BASE
-from src.prompt.legalbench_qa import LEGALBENCH_QA_BASE
-from src.prompt.legalbench_qa_detailed import QA_CONTRACT_BASE, QA_CONSUMER_BASE, QA_PRIVACY_BASE, QA_RULE_BASE
-from src.prompt.legalbench_sara_entailment import LEGALBENCH_SARA_ENTAILMENT_BASE
-from src.prompt.legalbench_privacy_policy_entailment import LEGALBENCH_PRIVACY_POLICY_ENTAILMENT_BASE
-from src.prompt.legalbench_insurance import LEGALBENCH_INSURANCE_BASE
-from src.prompt.legalbench_corporate_lobbying import LEGALBENCH_CORPORATE_LOBBYING_BASE
-from src.prompt.legalbench_scalr import LEGALBENCH_SCALR_BASE
-from src.prompt.arc import ARC_BASE
+﻿# coding: utf-8
+from hyper_simulation.prompt.hotpot_qa import HOTPOT_QA_BASE
+from hyper_simulation.prompt.musique import MUSIQUE_QA_BASE
+from hyper_simulation.prompt.multihop import MULTIHOP_QA_BASE
+from hyper_simulation.prompt.legalbench_qa import LEGALBENCH_QA_BASE
+from hyper_simulation.prompt.legalbench_qa_detailed import QA_CONTRACT_BASE, QA_CONSUMER_BASE, QA_PRIVACY_BASE, QA_RULE_BASE
+from hyper_simulation.prompt.legalbench_sara_entailment import LEGALBENCH_SARA_ENTAILMENT_BASE
+from hyper_simulation.prompt.legalbench_privacy_policy_entailment import LEGALBENCH_PRIVACY_POLICY_ENTAILMENT_BASE
+from hyper_simulation.prompt.legalbench_insurance import LEGALBENCH_INSURANCE_BASE
+from hyper_simulation.prompt.legalbench_corporate_lobbying import LEGALBENCH_CORPORATE_LOBBYING_BASE
+from hyper_simulation.prompt.legalbench_scalr import LEGALBENCH_SCALR_BASE
+from hyper_simulation.prompt.arc import ARC_BASE
 
 
 def build_prompt(question: str, context_text: str, task: str = "hotpotqa", context_type: str = None) -> str:
     """
-    构建用于LLM的prompt，根据不同任务选择相应的模板
+    鏋勫缓鐢ㄤ簬LLM鐨刾rompt锛屾牴鎹笉鍚屼换鍔￠€夋嫨鐩稿簲鐨勬ā鏉?
     
     Args:
-        question: 问题文本
-        context_text: 格式化后的context文本
-        task: 任务类型 (hotpotqa, musique, multihop, qa/*, legalbench/*)
+        question: 闂鏂囨湰
+        context_text: 鏍煎紡鍖栧悗鐨刢ontext鏂囨湰
+        task: 浠诲姟绫诲瀷 (hotpotqa, musique, multihop, qa/*, legalbench/*)
     
     Returns:
-        完整的prompt
+        瀹屾暣鐨刾rompt
     """
     if task == "hotpotqa":
         prompt = HOTPOT_QA_BASE.format(
@@ -118,3 +118,4 @@ def build_prompt(question: str, context_text: str, task: str = "hotpotqa", conte
         raise ValueError(f"Unsupported task: {task}")
 
     return prompt
+

@@ -1,4 +1,4 @@
-import sentencepiece
+﻿import sentencepiece
 import json
 import re
 import jsonlines
@@ -30,14 +30,14 @@ def run_rag_evaluation(
     load_prompts: str = None
 ):
     """
-    运行 RAG 评估任务 (支持断点续传和增量保存)
-    注意：使用 'question' 作为唯一标识符进行去重和续传。
+    杩愯 RAG 璇勪及浠诲姟 (鏀寔鏂偣缁紶鍜屽閲忎繚瀛?
+    娉ㄦ剰锛氫娇鐢?'question' 浣滀负鍞竴鏍囪瘑绗﹁繘琛屽幓閲嶅拰缁紶銆?
     """
     print(f"Loading data from {data_path}...")
     data: List[Dict[str, Any]] = load_data(data_path, task, using_support_only)
     print(f"Loaded {len(data)} samples")
     
-    # 🔹 1. 加载已有结果，获取已处理的问题集合
+    # 馃敼 1. 鍔犺浇宸叉湁缁撴灉锛岃幏鍙栧凡澶勭悊鐨勯棶棰橀泦鍚?
     processed_questions = set()
     existing_results = []
     
@@ -49,46 +49,46 @@ def run_rag_evaluation(
                     old_data = json.load(f)
                 existing_results = old_data.get("results", [])
                 
-                # 提取已处理的问题文本
+                # 鎻愬彇宸插鐞嗙殑闂鏂囨湰
                 for r in existing_results:
                     q = r.get("question")
                     if q:
                         processed_questions.add(q)
                 
-                print(f"✅ 发现已有结果文件，已加载 {len(processed_questions)} 条已完成记录。将从断点处继续。")
+                print(f"鉁?鍙戠幇宸叉湁缁撴灉鏂囦欢锛屽凡鍔犺浇 {len(processed_questions)} 鏉″凡瀹屾垚璁板綍銆傚皢浠庢柇鐐瑰缁х画銆?)
             except Exception as e:
-                print(f"⚠️ 读取已有结果文件失败：{e}。将重新开始。")
+                print(f"鈿狅笍 璇诲彇宸叉湁缁撴灉鏂囦欢澶辫触锛歿e}銆傚皢閲嶆柊寮€濮嬨€?)
         else:
-            print("ℹ️ 未找到已有结果文件，将从头开始运行。")
+            print("鈩癸笍 鏈壘鍒板凡鏈夌粨鏋滄枃浠讹紝灏嗕粠澶村紑濮嬭繍琛屻€?)
             
-    # 🔹 2. 加载已有 Prompts（如果指定）
+    # 馃敼 2. 鍔犺浇宸叉湁 Prompts锛堝鏋滄寚瀹氾級
     prompts_data = []
     if load_prompts:
-        print(f"📂 从 {load_prompts} 加载 Prompts...")
+        print(f"馃搨 浠?{load_prompts} 鍔犺浇 Prompts...")
         if load_prompts.endswith('.jsonl'):
             with jsonlines.open(load_prompts, 'r') as reader:
                 prompts_data = list(reader)
         else:
             with open(load_prompts, 'r', encoding='utf-8') as f:
                 prompts_data = json.load(f)
-        print(f"✅ 已加载 {len(prompts_data)} 条 Prompts")
-        # 过滤已完成的
+        print(f"鉁?宸插姞杞?{len(prompts_data)} 鏉?Prompts")
+        # 杩囨护宸插畬鎴愮殑
         prompts_data = [p for p in prompts_data if p.get('question') not in processed_questions]
-        print(f"📝 剩余 {len(prompts_data)} 条待处理 Prompts")
+        print(f"馃摑 鍓╀綑 {len(prompts_data)} 鏉″緟澶勭悊 Prompts")
     
-    # 如果有加载的 prompts，直接使用
+    # 濡傛灉鏈夊姞杞界殑 prompts锛岀洿鎺ヤ娇鐢?
     if load_prompts:
         items_to_process = prompts_data
     else:
         items_to_process = data
     
-    # 如果所有任务都已完成
+    # 濡傛灉鎵€鏈変换鍔￠兘宸插畬鎴?
     if len(items_to_process) - len(processed_questions) <= 0 and not load_prompts:
-        # 当使用 load_prompts 时，items_to_process 已经是过滤后的了，如果为空则直接结束
+        # 褰撲娇鐢?load_prompts 鏃讹紝items_to_process 宸茬粡鏄繃婊ゅ悗鐨勪簡锛屽鏋滀负绌哄垯鐩存帴缁撴潫
         pass
     if not items_to_process:
-        print("✨ 所有任务已完成！无需重新运行。")
-        # 重新计算一下最终指标并返回
+        print("鉁?鎵€鏈変换鍔″凡瀹屾垚锛佹棤闇€閲嶆柊杩愯銆?)
+        # 閲嶆柊璁＄畻涓€涓嬫渶缁堟寚鏍囧苟杩斿洖
         all_metrics_tmp = {"exact_match": [], "f1": [], "match": []}
         for r in existing_results:
             m = r.get("metrics", {})
@@ -98,24 +98,24 @@ def run_rag_evaluation(
         avg_metrics_tmp = {k: sum(v)/len(v) if v else 0 for k, v in all_metrics_tmp.items()}
         return existing_results, avg_metrics_tmp
 
-    # 🔹 3. 初始化 LLM（如果需要）
+    # 馃敼 3. 鍒濆鍖?LLM锛堝鏋滈渶瑕侊級
     if not load_prompts and not save_prompts_only:
         print(f"Initializing LLM: {model_name}")
         if build or method != "hyper_simulation":
             from langchain_ollama import ChatOllama
-            from hyper_simulation.llm.chat_completion import get_generate
+            from hyper_simulation.utils.chat_completion import get_generate
             model = ChatOllama(model=model_name, temperature=temperature, top_p=0.95, reasoning=False, timeout=300)
     elif load_prompts:
         print(f"Initializing LLM for pre-loaded prompts: {model_name}")
         from langchain_ollama import ChatOllama
-        from hyper_simulation.llm.chat_completion import get_generate
+        from hyper_simulation.utils.chat_completion import get_generate
         model = ChatOllama(model=model_name, temperature=temperature, top_p=0.95, reasoning=False, timeout=300)
     
-    # 🔹 4. 初始化结果容器和指标
+    # 馃敼 4. 鍒濆鍖栫粨鏋滃鍣ㄥ拰鎸囨爣
     results = list(existing_results) 
     all_metrics = {"exact_match": [], "f1": [], "match": []}
     
-    # 恢复已有结果的指标统计
+    # 鎭㈠宸叉湁缁撴灉鐨勬寚鏍囩粺璁?
     for r in existing_results:
         m = r.get("metrics", {})
         for k in all_metrics:
@@ -125,12 +125,12 @@ def run_rag_evaluation(
     print(f"Starting evaluation with batch_size={batch_size}... (Skip {len(processed_questions)} done)")
     current_task.set(task)
     
-    # 🔹 5. Prompt 保存路径
+    # 馃敼 5. Prompt 淇濆瓨璺緞
     prompt_save_path = None
     if save_prompts_only and output_path:
         prompt_save_path = Path(output_path) / f"{method}" / f"{task}.jsonl"
         prompt_save_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"💾 Prompts 将保存到：{prompt_save_path}")
+        print(f"馃捑 Prompts 灏嗕繚瀛樺埌锛歿prompt_save_path}")
     
     config = {
         "model_name": model_name,
@@ -143,14 +143,14 @@ def run_rag_evaluation(
     }
 
     new_results_buffer = [] 
-    prompts_buffer = []  # 用于批量保存 prompts
+    prompts_buffer = []  # 鐢ㄤ簬鎵归噺淇濆瓨 prompts
     if load_prompts:
         pbar_initial = 0
         pbar_total = len(items_to_process)
     else:
         pbar_initial = len(processed_questions)
         pbar_total = len(data)
-    # 进度条初始化：只显示剩余任务数量
+    # 杩涘害鏉″垵濮嬪寲锛氬彧鏄剧ず鍓╀綑浠诲姟鏁伴噺
     pbar = tqdm(total=pbar_total, desc=f"Processing {task}_{method}", position=0, leave=True, initial=pbar_initial)
 
     for batch_start in range(0, len(items_to_process), batch_size):
@@ -159,21 +159,21 @@ def run_rag_evaluation(
         for item in batch:
             q_text = item.get('question', '').strip() if isinstance(item, dict) else getattr(item, 'query', '')
             if q_text in processed_questions and not load_prompts:
-                # 当 load_prompts 时，之前已经过滤过了
+                # 褰?load_prompts 鏃讹紝涔嬪墠宸茬粡杩囨护杩囦簡
                 continue
             filtered_batch.append(item)
         
         if not filtered_batch:
             continue
 
-        # 🔹 6. 构建 QueryInstance (如果没有加载 prompts)
+        # 馃敼 6. 鏋勫缓 QueryInstance (濡傛灉娌℃湁鍔犺浇 prompts)
         if not load_prompts:
             query_instances = [build_query_instance_for_task(item, task) for item in filtered_batch]
             if not query_instances:
                 pbar.update(len(filtered_batch))
                 continue
     
-            # Method 处理
+            # Method 澶勭悊
             method_start = time.time()
             if method == "vanilla":
                 fixed_query_instances = query_instances
@@ -207,7 +207,7 @@ def run_rag_evaluation(
             
             method_time = time.time() - method_start
             
-            # 准备 Prompts
+            # 鍑嗗 Prompts
             prompts = []
             for item in fixed_query_instances:
                 context_text = "\n\n".join(item.fixed_data if item.fixed_data else item.data)
@@ -221,7 +221,7 @@ def run_rag_evaluation(
                 prompt = build_prompt(item.query, context_text, task=task, context_type=context_type)
                 prompts.append(prompt)
         else:
-            # 🔹 7. 直接从加载的 prompts 中恢复
+            # 馃敼 7. 鐩存帴浠庡姞杞界殑 prompts 涓仮澶?
             fixed_query_instances = []
             prompts = []
             for item in filtered_batch:
@@ -236,7 +236,7 @@ def run_rag_evaluation(
                 prompts.append(item.get('prompt', ''))
             method_time = 0
             
-        # 🔹 8. 保存 Prompts（如果只保存 prompts）
+        # 馃敼 8. 淇濆瓨 Prompts锛堝鏋滃彧淇濆瓨 prompts锛?
         if save_prompts_only:
             for qi, prompt in zip(fixed_query_instances, prompts):
                 prompt_entry = {
@@ -249,18 +249,18 @@ def run_rag_evaluation(
                 }
                 prompts_buffer.append(prompt_entry)
             
-            # 批量保存
+            # 鎵归噺淇濆瓨
             if len(prompts_buffer) >= save_interval:
-                with jsonlines.open(prompt_save_path, 'a') as writer:  # ✅ 使用 jsonlines.open
+                with jsonlines.open(prompt_save_path, 'a') as writer:  # 鉁?浣跨敤 jsonlines.open
                     for entry in prompts_buffer:
-                        writer.write(entry)  # ✅ 使用 Writer 对象的 write 方法
-                print(f"💾 已保存 {len(prompts_buffer)} 条 Prompts 到 {prompt_save_path}")
+                        writer.write(entry)  # 鉁?浣跨敤 Writer 瀵硅薄鐨?write 鏂规硶
+                print(f"馃捑 宸蹭繚瀛?{len(prompts_buffer)} 鏉?Prompts 鍒?{prompt_save_path}")
                 prompts_buffer = []
             
             pbar.update(len(filtered_batch))
-            continue  # 跳过 LLM 调用
+            continue  # 璺宠繃 LLM 璋冪敤
 
-        # 🔹 9. LLM 生成
+        # 馃敼 9. LLM 鐢熸垚
         gen_start = time.time()
         predictions = get_generate(prompts, model)
         gen_time = time.time() - gen_start
@@ -269,14 +269,14 @@ def run_rag_evaluation(
         batch_gen_time_per_item = gen_time / n_samples
         batch_method_time_per_item = method_time / n_samples
         
-        # 后处理和评估
+        # 鍚庡鐞嗗拰璇勪及
         for item, pred in zip(fixed_query_instances, predictions):
             processed_pred, parse_status, is_fallback = postprocess_answer(pred)
             # import sys
             # tqdm.write(f"[{pbar.n}] {processed_pred}", file=sys.stdout)
             metrics = evaluate_answer(processed_pred, item.answers)
             
-            pbar.update(1)  # 补回这行，确保处理过的每个条目都能推动进度条前进
+            pbar.update(1)  # 琛ュ洖杩欒锛岀‘淇濆鐞嗚繃鐨勬瘡涓潯鐩兘鑳芥帹鍔ㄨ繘搴︽潯鍓嶈繘
             
             is_correct = metrics['exact_match'] > 0
             result = {
@@ -300,16 +300,16 @@ def run_rag_evaluation(
             results.append(result)
             new_results_buffer.append(result)
             
-            # 标记为已处理
+            # 鏍囪涓哄凡澶勭悊
             processed_questions.add(item.query)
             
-            # 累积指标
+            # 绱Н鎸囨爣
             for metric_name, score in metrics.items():
                 all_metrics[metric_name].append(score)
         
-        # 🔹 10. 检查是否需要增量保存结果
+        # 馃敼 10. 妫€鏌ユ槸鍚﹂渶瑕佸閲忎繚瀛樼粨鏋?
         if len(new_results_buffer) >= save_interval:
-            # 合并旧结果和新缓冲区结果
+            # 鍚堝苟鏃х粨鏋滃拰鏂扮紦鍐插尯缁撴灉
             full_results_to_save = existing_results + new_results_buffer
             
             avg_metrics_curr = {
@@ -333,28 +333,28 @@ def run_rag_evaluation(
                     json.dump(output_data, f, indent=2, ensure_ascii=False)
                 temp_file.replace(out_file)
                 
-                print(f"💾 已增量保存 {len(new_results_buffer)} 条新记录 (总计：{len(full_results_to_save)})")
+                print(f"馃捑 宸插閲忎繚瀛?{len(new_results_buffer)} 鏉℃柊璁板綍 (鎬昏锛歿len(full_results_to_save)})")
             
-            # 更新 existing_results 以便下次增量保存包含之前的数据
+            # 鏇存柊 existing_results 浠ヤ究涓嬫澧為噺淇濆瓨鍖呭惈涔嬪墠鐨勬暟鎹?
             existing_results.extend(new_results_buffer)
             new_results_buffer = []
 
     pbar.close()
     
-    # 🔹 11. 保存剩余 Prompts
+    # 馃敼 11. 淇濆瓨鍓╀綑 Prompts
     if save_prompts_only and prompts_buffer:
-        # 如果是 load_prompts，说明这原本是一个从 .jsonl 加载的任务（如 sentli）
-        # 此时 prompt_save_path 是 data/mid_result/{method}/{task}.jsonl
-        # 我们确保用 jsonlines 追加写入
+        # 濡傛灉鏄?load_prompts锛岃鏄庤繖鍘熸湰鏄竴涓粠 .jsonl 鍔犺浇鐨勪换鍔★紙濡?sentli锛?
+        # 姝ゆ椂 prompt_save_path 鏄?data/mid_result/{method}/{task}.jsonl
+        # 鎴戜滑纭繚鐢?jsonlines 杩藉姞鍐欏叆
         if prompt_save_path:
             with jsonlines.open(prompt_save_path, 'a') as writer:
                 for entry in prompts_buffer:
                     writer.write(entry)
-            print(f"💾 已保存剩余 {len(prompts_buffer)} 条 Prompts 到 {prompt_save_path}")
+            print(f"馃捑 宸蹭繚瀛樺墿浣?{len(prompts_buffer)} 鏉?Prompts 鍒?{prompt_save_path}")
         else:
-            print("⚠️ 提示词缓冲非空，但未设置 prompt_save_path！")
+            print("鈿狅笍 鎻愮ず璇嶇紦鍐查潪绌猴紝浣嗘湭璁剧疆 prompt_save_path锛?)
     
-    # 🔹 12. 保存剩余结果
+    # 馃敼 12. 淇濆瓨鍓╀綑缁撴灉
     if new_results_buffer:
         full_results_to_save = existing_results + new_results_buffer
         avg_metrics_curr = {
@@ -375,9 +375,9 @@ def run_rag_evaluation(
             with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
             temp_file.replace(out_file)
-            print(f"💾 已保存剩余 {len(new_results_buffer)} 条记录 (总计：{len(full_results_to_save)})")
+            print(f"馃捑 宸蹭繚瀛樺墿浣?{len(new_results_buffer)} 鏉¤褰?(鎬昏锛歿len(full_results_to_save)})")
 
-    # 计算最终指标
+    # 璁＄畻鏈€缁堟寚鏍?
     avg_metrics = {
         metric_name: sum(scores) / len(scores) if scores else 0
         for metric_name, scores in all_metrics.items()
@@ -486,7 +486,7 @@ def main():
     rebuild_flag = args.rebuild == True
     using_support_only_flag = args.using_support_only == True
 
-    # 运行评估
+    # 杩愯璇勪及
     run_rag_evaluation(
         data_path=args.data_path,
         model_name=args.model_name,
@@ -507,5 +507,5 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 1. 先在excel上进行记录表
-# > 小模型
+# 1. 鍏堝湪excel涓婅繘琛岃褰曡〃
+# > 灏忔ā鍨

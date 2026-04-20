@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 import os
 from typing import Tuple
 
@@ -11,11 +11,11 @@ from src.paramatch import ParaMatchConfig, ParaMatcher
 from src.vparamatch import VParaMatcher
 from src.graph import Node, Edge as HEREdge, GraphView
 
-from src.query_instance import QueryInstance
-from src.hypergraph.graph import Graph as LocalGraph
-from src.hypergraph.hypergraph import Hypergraph as LocalHypergraph
-from src.component.consistent import load_hypergraphs_for_instance, get_distance, is_critical_vertex
-from src.utils.log import getLogger
+from hyper_simulation.query_instance import QueryInstance
+from hyper_simulation.hypergraph.graph import Graph as LocalGraph
+from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph
+from hyper_simulation.component.consistent import load_hypergraphs_for_instance, get_distance, is_critical_vertex
+from hyper_simulation.utils.log import getLogger
 from tqdm import tqdm
 import copy
 
@@ -72,7 +72,7 @@ def her_consistent_detection(
 ) -> Tuple[bool, str]:
     distance = get_distance(query_text, data_text)
     if distance <= distance_threshold:
-        return False, f"[CONSISTENT] Distance={distance:.4f} ≤ threshold={distance_threshold}"
+        return False, f"[CONSISTENT] Distance={distance:.4f} 鈮?threshold={distance_threshold}"
 
     q_her_graph = convert_local_to_her(query_hg, "Q")
     d_her_graph = convert_local_to_her(data_hg, "D")
@@ -87,7 +87,7 @@ def her_consistent_detection(
     for q_vertex in critical_q_vertices:
         q_node_id = str(q_vertex.id)
         try:
-            # vmatcher.run 寻找 Q graph 到 D graph 的对应节点
+            # vmatcher.run 瀵绘壘 Q graph 鍒?D graph 鐨勫搴旇妭鐐?
             pairs = scorer.vmatcher.run(q_her_graph, d_her_graph, q_node_id)
             matched = len(pairs) > 0
         except Exception as e:
@@ -100,12 +100,12 @@ def her_consistent_detection(
     if has_contradiction:
         evidence = (
             f"[CONTRADICTION] Distance={distance:.4f} > threshold={distance_threshold}\n"
-            + "\n".join(f"  • {line}" for line in evidence_lines)
+            + "\n".join(f"  鈥?{line}" for line in evidence_lines)
         )
     else:
         evidence = (
             f"[CONSISTENT] Distance={distance:.4f} > threshold but structural coverage satisfied\n"
-            f"  ✓ All {len(critical_q_vertices)} critical Q vertices matched in D via HER"
+            f"  鉁?All {len(critical_q_vertices)} critical Q vertices matched in D via HER"
         )
     return has_contradiction, evidence
 
@@ -139,3 +139,4 @@ def query_fixup(query_instance: QueryInstance, dataset_name: str = "hotpotqa", b
     fixed_instance = copy.deepcopy(query_instance)
     fixed_instance.fixed_data = fixed_data
     return fixed_instance
+

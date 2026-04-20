@@ -1,4 +1,4 @@
-import torch
+﻿import torch
 import argparse
 import os
 import json
@@ -9,10 +9,10 @@ import glob
 import time
 from pathlib import Path
 # ==============================================================================
-# 1. 复用现有的模块 (Reusing Existing Interfaces)
+# 1. 澶嶇敤鐜版湁鐨勬ā鍧?(Reusing Existing Interfaces)
 # ==============================================================================
 
-# 复用检索模块的工具函数
+# 澶嶇敤妫€绱㈡ā鍧楃殑宸ュ叿鍑芥暟
 #
 from hyper_simulation.question_answer.vmdit.retrieval import (
     embed_queries, 
@@ -20,18 +20,18 @@ from hyper_simulation.question_answer.vmdit.retrieval import (
     add_hasanswer,
     index_encoded_data
 )
-# 复用 Contriever 底层接口
+# 澶嶇敤 Contriever 搴曞眰鎺ュ彛
 #
 import contrievers
 import contrievers.index
 import contrievers.data
 
-# 复用 LLM 调用接口
+# 澶嶇敤 LLM 璋冪敤鎺ュ彛
 #
-from hyper_simulation.llm.chat_completion import get_generate
+from hyper_simulation.utils.chat_completion import get_generate
 from langchain_ollama import ChatOllama
 
-# 复用数据处理和 Prompt 模板
+# 澶嶇敤鏁版嵁澶勭悊鍜?Prompt 妯℃澘
 #
 from hyper_simulation.question_answer.vmdit.utils import (
     PROMPT_DICT, 
@@ -41,7 +41,7 @@ from hyper_simulation.question_answer.vmdit.utils import (
 )
 
 # ==============================================================================
-# 2. RAG 框架实现 (RAG Framework Implementation)
+# 2. RAG 妗嗘灦瀹炵幇 (RAG Framework Implementation)
 # ==============================================================================
 
 class RAGPipeline:
@@ -53,31 +53,31 @@ class RAGPipeline:
                  llm_model_name: str = "qwen3.5:9b",
                  device: str = "cuda"):
         """
-        初始化 RAG 流水线，加载所有必要的模型和索引。
+        鍒濆鍖?RAG 娴佹按绾匡紝鍔犺浇鎵€鏈夊繀瑕佺殑妯″瀷鍜岀储寮曘€?
         """
         self.device = device
         
-        # --- 初始化检索器 (Retrieval Setup) ---
+        # --- 鍒濆鍖栨绱㈠櫒 (Retrieval Setup) ---
         print(f"Loading Retriever from {retriever_model_path}...")
-        # 直接复用 contrievers.load_retriever
+        # 鐩存帴澶嶇敤 contrievers.load_retriever
         self.retriever_model, self.retriever_tokenizer, _ = contrievers.load_retriever(retriever_model_path)
         self.retriever_model.eval()
         self.retriever_model.to(device)
         if device == "cuda":
             self.retriever_model.half()
 
-        # 加载索引 (Index)
-        # 复用 contrievers.index.Indexer
+        # 鍔犺浇绱㈠紩 (Index)
+        # 澶嶇敤 contrievers.index.Indexer
         print(f"Loading Index from {index_path}...")
         self.index = contrievers.index.Indexer(vector_sz=768, n_subquantizers=0, n_bits=8, mode='hnsw')
-        # 替换原有的 self.index.deserialize_from(index_path) 及其周边代码
+        # 鏇挎崲鍘熸湁鐨?self.index.deserialize_from(index_path) 鍙婂叾鍛ㄨ竟浠ｇ爜
         index_dir = index_path.rstrip('/')
         index_file = os.path.join(index_dir, "index.faiss")
         meta_file = os.path.join(index_dir, "index_meta.faiss")
         if os.path.exists(index_file):
             import faiss
             import pickle
-            print(f"⚡ Loading 65GB index via Memory-Mapped I/O (MMAP) to bypass RAM limit...")
+            print(f"鈿?Loading 65GB index via Memory-Mapped I/O (MMAP) to bypass RAM limit...")
             faiss_idx = faiss.read_index(index_file, faiss.IO_FLAG_MMAP | faiss.IO_FLAG_READ_ONLY)
             target_attr = "index" if hasattr(self.index, "index") else "faiss_index"
             setattr(self.index, target_attr, faiss_idx)
@@ -87,46 +87,46 @@ class RAGPipeline:
                 with open(meta_file, "rb") as reader:
                     self.index.index_id_to_db_id = pickle.load(reader)
             else:
-                print(f"⚠️ Warning: Meta data not found at {meta_file}")
+                print(f"鈿狅笍 Warning: Meta data not found at {meta_file}")
                 
-            print(f"✅ Index mapped successfully. Physical RAM usage stable.")            
+            print(f"鉁?Index mapped successfully. Physical RAM usage stable.")            
         else:
             print(f"Index not found at {index_path}. Building from embeddings in {embedding_dir}...")
             
-            # 获取所有 embedding 文件 (.pkl)
+            # 鑾峰彇鎵€鏈?embedding 鏂囦欢 (.pkl)
             input_paths = glob.glob(os.path.join(embedding_dir, "passages_*")) 
             input_paths = sorted(input_paths)
             
             if not input_paths:
                  raise FileNotFoundError(f"No embedding files found in {embedding_dir}. Please run generate_passage_embedding.py first.")
 
-            # 构建索引
+            # 鏋勫缓绱㈠紩
             start_time = time.time()
             index_encoded_data(self.index, input_paths, indexing_batch_size=1000000) #
             print(f"Indexing finished in {time.time()-start_time:.1f} s.")
             
-            # 保存索引以便下次使用
+            # 淇濆瓨绱㈠紩浠ヤ究涓嬫浣跨敤
             os.makedirs(os.path.dirname(index_path), exist_ok=True)
             self.index.serialize(index_path)
             print(f"Index saved to {index_path}")
 
-        # 加载文档库 (Passages)
-        # 复用 contrievers.data.load_passages
+        # 鍔犺浇鏂囨。搴?(Passages)
+        # 澶嶇敤 contrievers.data.load_passages
         print(f"Loading Passages from {passages_path}...")
         self.passages = contrievers.data.load_passages(passages_path)
         self.passage_id_map = {x["id"]: x for x in self.passages}
 
-        # --- 初始化生成器 (Generation Setup) ---
+        # --- 鍒濆鍖栫敓鎴愬櫒 (Generation Setup) ---
         print(f"Loading LLM {llm_model_name}...")
-        # 复用 ChatOllama
+        # 澶嶇敤 ChatOllama
         self.llm = ChatOllama(model=llm_model_name, temperature=0.8, top_p=0.95)
 
     def retrieve(self, queries: List[str], top_k: int = 5) -> List[List[Dict]]:
         """
-        执行检索步骤。
-        完全复用 vmdit/retrieval.py 中的逻辑。
+        鎵ц妫€绱㈡楠ゃ€?
+        瀹屽叏澶嶇敤 vmdit/retrieval.py 涓殑閫昏緫銆?
         """
-        # 构造 args 对象以适配 embed_queries 函数的签名
+        # 鏋勯€?args 瀵硅薄浠ラ€傞厤 embed_queries 鍑芥暟鐨勭鍚?
         #
         args = SimpleNamespace(
             lowercase=False, 
@@ -136,35 +136,35 @@ class RAGPipeline:
         )
 
         print("Embedding queries...")
-        # 复用 embed_queries
+        # 澶嶇敤 embed_queries
         query_embeddings = embed_queries(args, queries, self.retriever_model, self.retriever_tokenizer)
 
         print("Searching index...")
-        # 复用 index.search_knn
+        # 澶嶇敤 index.search_knn
         top_ids_and_scores = self.index.search_knn(query_embeddings, top_k)
 
-        # 构造临时数据结构以利用 add_passages 函数
+        # 鏋勯€犱复鏃舵暟鎹粨鏋勪互鍒╃敤 add_passages 鍑芥暟
         dummy_data = [{"question": q} for q in queries]
         
-        # 复用 add_passages 将检索结果注入数据
+        # 澶嶇敤 add_passages 灏嗘绱㈢粨鏋滄敞鍏ユ暟鎹?
         add_passages(dummy_data, self.passage_id_map, top_ids_and_scores)
         
-        # 返回每个 query 对应的 ctxs 列表
+        # 杩斿洖姣忎釜 query 瀵瑰簲鐨?ctxs 鍒楄〃
         return [item["ctxs"] for item in dummy_data]
 
     def generate(self, items: List[Dict], task: str = "qa", top_n: int = 5, save_prompts_only: bool = False, prompt_save_path: str = None) -> List[str]:
         """
-        执行生成步骤。
-        复用 base_line_lm.py 和 vmdit/utils.py 的逻辑。
+        鎵ц鐢熸垚姝ラ銆?
+        澶嶇敤 base_line_lm.py 鍜?vmdit/utils.py 鐨勯€昏緫銆?
         """
         
-        # 1. 准备 Prompts
+        # 1. 鍑嗗 Prompts
         prompts = []
         for item in items:
-            # 这里的 item 应该已经包含 'ctxs' (由 retrieve 步骤产生)
+            # 杩欓噷鐨?item 搴旇宸茬粡鍖呭惈 'ctxs' (鐢?retrieve 姝ラ浜х敓)
             
-            # A. 拼接检索到的段落 (Context Construction)
-            # 逻辑来源:
+            # A. 鎷兼帴妫€绱㈠埌鐨勬钀?(Context Construction)
+            # 閫昏緫鏉ユ簮:
             retrieval_result = item.get("ctxs", [])[:top_n]
             evidences = [
                 "[{}] {}\n{}".format(i+1, ctx["title"], ctx["text"]) 
@@ -172,15 +172,15 @@ class RAGPipeline:
             ]
             paragraph = "\n".join(evidences)
 
-            # B. 处理指令和选项 (Instruction Formatting)
-            # 逻辑来源:
-            # 我们手动构建 preprocess_input_data 的效果
+            # B. 澶勭悊鎸囦护鍜岄€夐」 (Instruction Formatting)
+            # 閫昏緫鏉ユ簮:
+            # 鎴戜滑鎵嬪姩鏋勫缓 preprocess_input_data 鐨勬晥鏋?
             instruction_text = TASK_INST.get(task, item.get("question", ""))
             
-            # 处理 ARC/多选题的选项格式化
+            # 澶勭悊 ARC/澶氶€夐鐨勯€夐」鏍煎紡鍖?
             choices_str = ""
             if task in ["arc_c", "arc_easy", "obqa"] and "choices" in item:
-                # 简化的选项格式化逻辑，参考 utils.py
+                # 绠€鍖栫殑閫夐」鏍煎紡鍖栭€昏緫锛屽弬鑰?utils.py
                 choices = item["choices"]
                 labels = choices.get("label", [])
                 texts = choices.get("text", [])
@@ -194,65 +194,65 @@ class RAGPipeline:
             
             full_instruction = f"{instruction_text}\n\n### Input:\n{item['question']}{choices_str}"
             
-            # C. 应用模板
-            # 复用 PROMPT_DICT
+            # C. 搴旂敤妯℃澘
+            # 澶嶇敤 PROMPT_DICT
             prompt = PROMPT_DICT["prompt_no_input_retrieval"].format(
                 paragraph=paragraph,
                 instruction=full_instruction
             )
             prompts.append(prompt)
 
-        # 🔹 如果只需要保存 prompts (在这里，我们保存的是原始数据加上 ctxs)
+        # 馃敼 濡傛灉鍙渶瑕佷繚瀛?prompts (鍦ㄨ繖閲岋紝鎴戜滑淇濆瓨鐨勬槸鍘熷鏁版嵁鍔犱笂 ctxs)
         if save_prompts_only and prompt_save_path:
             prompts_buffer = []
             for item in items:
-                # 重新构造类似原始 jsonl 的结构，但加上了 retrieved 的 ctxs
-                # 为了适配后续 rag_no_retrival.py 的 load_data 能够读取，我们把 ctxs 里的 text 提取出来作为支持事实
+                # 閲嶆柊鏋勯€犵被浼煎師濮?jsonl 鐨勭粨鏋勶紝浣嗗姞涓婁簡 retrieved 鐨?ctxs
+                # 涓轰簡閫傞厤鍚庣画 rag_no_retrival.py 鐨?load_data 鑳藉璇诲彇锛屾垜浠妸 ctxs 閲岀殑 text 鎻愬彇鍑烘潵浣滀负鏀寔浜嬪疄
                 
-                # 提取 retrieved 文本作为支持文档 (这里模拟 hotpotqa/musique 的数据结构)
+                # 鎻愬彇 retrieved 鏂囨湰浣滀负鏀寔鏂囨。 (杩欓噷妯℃嫙 hotpotqa/musique 鐨勬暟鎹粨鏋?
                 retrieval_result = item.get("ctxs", [])[:top_n]
                 paragraphs = []
                 for ctx in retrieval_result:
                     title = ctx.get("title", "")
                     text = ctx.get("text", "")
-                    # 模拟段落结构，如果是支持文档就加上
+                    # 妯℃嫙娈佃惤缁撴瀯锛屽鏋滄槸鏀寔鏂囨。灏卞姞涓?
                     paragraphs.append({
                         "title": title,
                         "text": text,
-                        "is_supporting": True  # 假设所有检索到的都视为可用的支持文档
+                        "is_supporting": True  # 鍋囪鎵€鏈夋绱㈠埌鐨勯兘瑙嗕负鍙敤鐨勬敮鎸佹枃妗?
                     })
                 
-                # 构建输出字典
+                # 鏋勫缓杈撳嚭瀛楀吀
                 prompt_entry = {
                     "question": item.get("question", ""),
-                    "answerKey": item.get("answers", []), # ARC 专用的答案字段
-                    "choices": item.get("choices", {}),   # ARC 专用的选项字段
-                    "paragraphs": paragraphs              # 新增的检索出来的上下文
+                    "answerKey": item.get("answers", []), # ARC 涓撶敤鐨勭瓟妗堝瓧娈?
+                    "choices": item.get("choices", {}),   # ARC 涓撶敤鐨勯€夐」瀛楁
+                    "paragraphs": paragraphs              # 鏂板鐨勬绱㈠嚭鏉ョ殑涓婁笅鏂?
                 }
                 prompts_buffer.append(prompt_entry)
             
-            # 批量保存
+            # 鎵归噺淇濆瓨
             Path(prompt_save_path).parent.mkdir(parents=True, exist_ok=True)
             with jsonlines.open(prompt_save_path, 'a') as writer:
                 for entry in prompts_buffer:
                     writer.write(entry)
-            print(f"💾 已保存 {len(prompts_buffer)} 条带 Retrieval Context 的数据到 {prompt_save_path}")
-            return [""] * len(items)  # 占位返回
+            print(f"馃捑 宸蹭繚瀛?{len(prompts_buffer)} 鏉″甫 Retrieval Context 鐨勬暟鎹埌 {prompt_save_path}")
+            return [""] * len(items)  # 鍗犱綅杩斿洖
 
-        # 2. 批量生成
+        # 2. 鎵归噺鐢熸垚
         print(f"Generating responses for {len(prompts)} prompts...")
-        # 复用 get_generate
+        # 澶嶇敤 get_generate
         raw_responses = get_generate(prompts, self.llm)
         print(f"Raw responses is {raw_responses}")
 
-        # 3. 后处理
+        # 3. 鍚庡鐞?
         final_results = []
         for resp in raw_responses:
-            # 基础清洗
+            # 鍩虹娓呮礂
             cleaned = resp.split("\n\n")[0].replace("</s>", "").strip()
             
-            # 针对特定任务的提取
-            # 复用 postprocess_answers_closed
+            # 閽堝鐗瑰畾浠诲姟鐨勬彁鍙?
+            # 澶嶇敤 postprocess_answers_closed
             choices_arg = "A B C D" if task in ["arc_c", "arc_easy"] else None
             final_out = postprocess_answers_closed(cleaned, task, choices=choices_arg)
             final_results.append(final_out)
@@ -261,31 +261,31 @@ class RAGPipeline:
 
     def run_batch(self, input_data: List[Dict], task: str = "qa", top_n: int = 5, save_prompts_only: bool = False, prompt_save_path: str = None):
         """
-        端到端运行：输入数据 -> 检索 -> 生成
+        绔埌绔繍琛岋細杈撳叆鏁版嵁 -> 妫€绱?-> 鐢熸垚
         """
-        # 1. 提取 Query
+        # 1. 鎻愬彇 Query
         queries = [item["question"] for item in input_data]
         
-        # 2. 检索
+        # 2. 妫€绱?
         print("--- Start Retrieval ---")
         ctxs_list = self.retrieve(queries, top_k=top_n)
         
-        # 3. 将检索结果合并回 input_data
+        # 3. 灏嗘绱㈢粨鏋滃悎骞跺洖 input_data
         for item, ctxs in zip(input_data, ctxs_list):
             item["ctxs"] = ctxs
             
-        # 4. 生成 (或只保存 Prompt)
+        # 4. 鐢熸垚 (鎴栧彧淇濆瓨 Prompt)
         print("--- Start Generation ---")
         answers = self.generate(input_data, task=task, top_n=top_n, save_prompts_only=save_prompts_only, prompt_save_path=prompt_save_path)
                 
-        # 5. 结果合并
+        # 5. 缁撴灉鍚堝苟
         for item, ans in zip(input_data, answers):
             item["output"] = ans
             
         return input_data
 
 # ==============================================================================
-# 3. 使用示例 (Usage Example)
+# 3. 浣跨敤绀轰緥 (Usage Example)
 # ==============================================================================
 
 if __name__ == "__main__":
@@ -295,32 +295,32 @@ if __name__ == "__main__":
     parser.add_argument('--prompt_save_path', type=str, default="/home/vincent/hyper-simulation/data/mid_result/arc/arc_retrieved.jsonl")
     args = parser.parse_args()
 
-    # 初始化 pipeline (请确保路径指向你实际的模型文件)
+    # 鍒濆鍖?pipeline (璇风‘淇濊矾寰勬寚鍚戜綘瀹為檯鐨勬ā鍨嬫枃浠?
     rag = RAGPipeline(
-        retriever_model_path="models/contriever-msmarco", # 需替换为实际路径
-        passages_path="data/psgs_w100.tsv",             # 需替换为实际路径
-        index_path="../index_hnsw/"                     # 需替换为实际路径
+        retriever_model_path="models/contriever-msmarco", # 闇€鏇挎崲涓哄疄闄呰矾寰?
+        passages_path="data/psgs_w100.tsv",             # 闇€鏇挎崲涓哄疄闄呰矾寰?
+        index_path="../index_hnsw/"                     # 闇€鏇挎崲涓哄疄闄呰矾寰?
     )
 
     if args.data_path:
-        # 如果传入了真实数据路径，则加载数据
+        # 濡傛灉浼犲叆浜嗙湡瀹炴暟鎹矾寰勶紝鍒欏姞杞芥暟鎹?
         from hyper_simulation.question_answer.utils.load_data import load_data
         
-        # ARC 数据需要以特定方式加载，这里借用已有的 load_data
+        # ARC 鏁版嵁闇€瑕佷互鐗瑰畾鏂瑰紡鍔犺浇锛岃繖閲屽€熺敤宸叉湁鐨?load_data
         raw_data = load_data(args.data_path, "ARC")
         print(f"Loaded {len(raw_data)} samples from {args.data_path}")
         
-        # 将原始数据转换为 rag.py 需要的格式
+        # 灏嗗師濮嬫暟鎹浆鎹负 rag.py 闇€瑕佺殑鏍煎紡
         test_data = []
         for item in raw_data:
             test_data.append({
                 "question": item.get("question", ""),
                 "choices": item.get("choices", {}),
-                "answers": item.get("answerKey", [])  # 仅作参考保留
+                "answers": item.get("answerKey", [])  # 浠呬綔鍙傝€冧繚鐣?
             })
             
-        # 批量处理
-        # 如果数据量很大，建议外层再套一个 batch 循环，这里直接跑
+        # 鎵归噺澶勭悊
+        # 濡傛灉鏁版嵁閲忓緢澶э紝寤鸿澶栧眰鍐嶅涓€涓?batch 寰幆锛岃繖閲岀洿鎺ヨ窇
         batch_size = 100
         for i in range(0, len(test_data), batch_size):
             batch = test_data[i:i+batch_size]
@@ -335,7 +335,7 @@ if __name__ == "__main__":
         
         print("Done!")
     else:
-        # 默认的模拟数据测试
+        # 榛樿鐨勬ā鎷熸暟鎹祴璇?
         test_data = [
             {
                 "id": 1,
@@ -348,10 +348,10 @@ if __name__ == "__main__":
             }
         ]
 
-        # 运行 PopQA 风格任务
+        # 杩愯 PopQA 椋庢牸浠诲姟
         results = rag.run_batch(test_data[:1], task="qa")
         print(f"QA Result: {results[0]['output']}")
 
-        # 运行 ARC 风格任务
+        # 杩愯 ARC 椋庢牸浠诲姟
         results_arc = rag.run_batch(test_data[1:], task="arc_c")
         print(f"ARC Result: {results_arc[0]['output']}")

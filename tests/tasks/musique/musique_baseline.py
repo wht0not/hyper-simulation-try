@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -10,8 +10,8 @@ from typing import Any
 from langchain_ollama import ChatOllama
 from tqdm import tqdm
 
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.musique import MUSIQUE_QA_BASE
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.musique import MUSIQUE_QA_BASE
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	match,
@@ -99,7 +99,7 @@ def _extract_context_text(raw_prompt: str) -> str:
 	if match_obj:
 		return match_obj.group(1).strip()
 
-	# 兜底：无法严格匹配时，尽量截取到 Question 前。
+	# 鍏滃簳锛氭棤娉曚弗鏍煎尮閰嶆椂锛屽敖閲忔埅鍙栧埌 Question 鍓嶃€?
 	question_anchor = re.search(r"\n###\s*Question:\s*\n", raw_prompt, re.IGNORECASE)
 	if question_anchor:
 		return raw_prompt[: question_anchor.start()].strip()
@@ -272,7 +272,7 @@ def _extract_docs_from_item(item: dict[str, Any] | None, max_docs: int = 20) -> 
 	if not isinstance(item, dict):
 		return []
 
-	# 仅使用数据集中的 paragraphs 作为原始 context 来源。
+	# 浠呬娇鐢ㄦ暟鎹泦涓殑 paragraphs 浣滀负鍘熷 context 鏉ユ簮銆?
 	paragraphs = item.get("paragraphs", []) or []
 	docs: list[str] = []
 	if isinstance(paragraphs, list) and paragraphs:
@@ -334,7 +334,7 @@ def _prepare_method_rows(
 			rows = rows[:limit]
 		return rows, str(in_file)
 
-	# cdit / contradoc / vanilla: 完全基于原始 dataset 的 question + paragraphs 手工生成。
+	# cdit / contradoc / vanilla: 瀹屽叏鍩轰簬鍘熷 dataset 鐨?question + paragraphs 鎵嬪伐鐢熸垚銆?
 	dataset_rows = _load_dataset_items(dataset_paths=dataset_paths, limit=limit)
 	generated_rows: list[dict[str, Any]] = []
 	cache_map = _load_context_cache_map(context_cache_file) if context_cache_file else {}
@@ -367,13 +367,13 @@ def _prepare_method_rows(
 			continue
 
 		sub_questions = _extract_subquestions_from_item(item)
-		# 强保证：cdit/contradoc 必须有 sub-question，才进入多轮。
+		# 寮轰繚璇侊細cdit/contradoc 蹇呴』鏈?sub-question锛屾墠杩涘叆澶氳疆銆?
 		if not sub_questions:
 			continue
 
 		docs = _extract_docs_from_item(item, max_docs=20)
 		if not docs:
-			# 严格要求：context 必须来自 dataset paragraphs。
+			# 涓ユ牸瑕佹眰锛歝ontext 蹇呴』鏉ヨ嚜 dataset paragraphs銆?
 			continue
 
 		try:
@@ -437,7 +437,7 @@ def run_musique_baseline(
 		"results": {},
 	}
 
-	# 统一收集 instance_id，加载分解所需的 question_decomposition。
+	# 缁熶竴鏀堕泦 instance_id锛屽姞杞藉垎瑙ｆ墍闇€鐨?question_decomposition銆?
 	all_ids: set[str] = set()
 	for method in methods:
 		in_file = prompts_root / f"{method}_prompts.jsonl"
@@ -486,7 +486,7 @@ def run_musique_baseline(
 				"avg_hit": fmean(method_hit) if method_hit else 0.0,
 			}
 
-		# 初始化方法文件，确保中断时也能看到开始状态。
+		# 鍒濆鍖栨柟娉曟枃浠讹紝纭繚涓柇鏃朵篃鑳界湅鍒板紑濮嬬姸鎬併€?
 		_safe_write_json(out_file, {"summary": _method_summary(), "results": method_results})
 
 		pbar_exec = tqdm(rows, desc=f"baseline/{method}", unit="q")
@@ -503,7 +503,7 @@ def run_musique_baseline(
 
 			if not question:
 				tqdm.write(f"[ERROR][baseline/{method}] instance_id={instance_id} empty question, skip")
-				# 即便跳过也同步写一次，体现实时进度。
+				# 鍗充究璺宠繃涔熷悓姝ュ啓涓€娆★紝浣撶幇瀹炴椂杩涘害銆?
 				_safe_write_json(out_file, {"summary": _method_summary(), "results": method_results})
 				global_summary["results"][method] = {
 					"status": "running",
@@ -576,7 +576,7 @@ def run_musique_baseline(
 					continue
 			else:
 				if method in {"cdit", "contradoc", "vanilla"}:
-					# 强保证：这两个方法无 sub-question 时不做单轮回退。
+					# 寮轰繚璇侊細杩欎袱涓柟娉曟棤 sub-question 鏃朵笉鍋氬崟杞洖閫€銆?
 					tqdm.write(f"[ERROR][baseline/{method}] instance_id={instance_id} missing sub_questions, skip")
 					_safe_write_json(out_file, {"summary": _method_summary(), "results": method_results})
 					global_summary["results"][method] = {
@@ -586,7 +586,7 @@ def run_musique_baseline(
 					}
 					_safe_write_json(out_root / "musique_baseline_summary.json", global_summary)
 					continue
-				# 找不到分解时，回退为单轮。
+				# 鎵句笉鍒板垎瑙ｆ椂锛屽洖閫€涓哄崟杞€?
 				try:
 					prompt = MUSIQUE_QA_BASE.format(context_text=context_text, question=question)
 					raw_answer = get_invoke(model, prompt)
@@ -616,7 +616,7 @@ def run_musique_baseline(
 				}
 			)
 
-			# 每处理完一个 question 立即落盘，防止崩溃/超时丢进度。
+			# 姣忓鐞嗗畬涓€涓?question 绔嬪嵆钀界洏锛岄槻姝㈠穿婧?瓒呮椂涓㈣繘搴︺€?
 			_safe_write_json(out_file, {"summary": _method_summary(), "results": method_results})
 			global_summary["results"][method] = {
 				"status": "running",
@@ -674,3 +674,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

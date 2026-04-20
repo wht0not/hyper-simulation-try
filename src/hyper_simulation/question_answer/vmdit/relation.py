@@ -1,9 +1,9 @@
-import tqdm
+﻿import tqdm
 import torch
 import json
 import matplotlib.pyplot as plt
-from hyper_simulation.llm.prompt.vmdit import same_statements, same_sentences
-from hyper_simulation.llm.chat_completion import get_invoke_prompt
+from hyper_simulation.prompt.vmdit import same_statements, same_sentences
+from hyper_simulation.utils.chat_completion import get_invoke_prompt
 from tqdm import tqdm
 
 def get_ctxs_em(file_path):
@@ -48,7 +48,7 @@ def same_sentences_with_llm(evi, query):
 #             temperature=0.9,
 #         )
 #     return response['data']['choices'][0]['content']
-# def get_llm_chatglm_0(evi,query): #思维链表达VMD
+# def get_llm_chatglm_0(evi,query): #鎬濈淮閾捐〃杈綱MD
 #     # your api key
 #     #print("llm!")
 #     zhipuai.api_key = "36d848bfbccdd993f40352f4e48bf43c.VRyq7foZfDFDE29t"
@@ -122,3 +122,4 @@ if __name__=='__main__':
         file.write(json_data)
     with open("relation_context/L2/relation_context_popqa_error.json", "w") as file:
         file.write(json_data_1)
+

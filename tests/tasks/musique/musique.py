@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -15,8 +15,8 @@ from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.component.postprocess import get_simulation_slice, ranking_slices
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.musique import MUSIQUE_QA_HYPER
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.musique import MUSIQUE_QA_HYPER
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	metric_max_over_ground_truths,
@@ -113,7 +113,7 @@ def _coerce_int(value: Any) -> int | None:
 def _coerce_support_idx(value: Any) -> int | None:
 	if value is None:
 		return None
-	# 支持 11 / 11.0 / "11" / "11.0"
+	# 鏀寔 11 / 11.0 / "11" / "11.0"
 	if isinstance(value, str):
 		value = value.strip()
 		if not value:
@@ -138,7 +138,7 @@ def _load_decompose_steps(instance_dir: Path, query_hg: LocalHypergraph, item: d
 	if not isinstance(records, list):
 		return []
 
-	# 从原始 question_decomposition 顺序读取 paragraph_support_idx（作为回退来源）
+	# 浠庡師濮?question_decomposition 椤哄簭璇诲彇 paragraph_support_idx锛堜綔涓哄洖閫€鏉ユ簮锛?
 	raw_qd = item.get("question_decomposition", []) or []
 	qd_support_indices: list[int | None] = []
 	if isinstance(raw_qd, list):
@@ -275,7 +275,7 @@ def _build_context_block(
 
 	ranked_slice_indices = ranking_slices(query, simulation_slices, vertex_ids, k=15)
 
-	# 与 support_check 一致：按 hit_cnt 划分同分组；若 support_idx 在某组内，将其移到该组最前。
+	# 涓?support_check 涓€鑷达細鎸?hit_cnt 鍒掑垎鍚屽垎缁勶紱鑻?support_idx 鍦ㄦ煇缁勫唴锛屽皢鍏剁Щ鍒拌缁勬渶鍓嶃€?
 	vertex_needs: set[Vertex] = {u for u in query.vertices if u.id in vertex_ids}
 	slice_hit_cnt: dict[int, int] = {}
 	for idx, simulation_slice in enumerate(simulation_slices):
@@ -674,3 +674,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

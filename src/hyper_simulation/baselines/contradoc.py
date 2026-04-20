@@ -1,10 +1,10 @@
-import re
-from hyper_simulation.llm.prompt.contradoc import contradoc_prompt, contradoc_entailment_prompt
+﻿import re
+from hyper_simulation.prompt.contradoc import contradoc_prompt, contradoc_entailment_prompt
 from hyper_simulation.query_instance import QueryInstance
 
 from langchain_ollama import ChatOllama
 
-from hyper_simulation.llm.chat_completion import get_generate
+from hyper_simulation.utils.chat_completion import get_generate
 
 import json
 
@@ -108,3 +108,4 @@ def query_fixup(query: QueryInstance, model: ChatOllama) -> QueryInstance:
         fixed_data.append(fixed_doc)
     query.fixed_data = fixed_data
     return query
+

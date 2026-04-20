@@ -1,6 +1,6 @@
-"""
-从 pkl 文件加载超图并运行 simulation
-在 sc 环境中运行
+﻿"""
+浠?pkl 鏂囦欢鍔犺浇瓒呭浘骞惰繍琛?simulation
+鍦?sc 鐜涓繍琛?
 """
 import sys
 import os
@@ -12,8 +12,8 @@ os.environ.setdefault("RUST_LOG", "error")
 os.environ.setdefault("GRAPH_SIM_LOG", "error")
 os.environ.setdefault("GRAPH_SIM_LOG_LEVEL", "error")
 
-from hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex
-from nli import get_nli_labels_batch
+from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex
+from hyper_simulation.component.nli import get_nli_labels_batch
 from simulation import Hypergraph as SimHypergraph, Hyperedge as SimHyperedge, Node as SimNode, Delta, DMatch
 
 ROOT = Path(__file__).resolve().parents[0]
@@ -362,9 +362,11 @@ def main():
 if __name__ == "__main__":
     main()
 
-# 判断label是否准确的判定；100个
-# 用1：3左右的q:d的比例，去跑simulation；用q和d发现的节点喂给大模型判断其一致性，输出他认为所匹配的节点和冲突的节点，**match的定义**
+# 鍒ゆ柇label鏄惁鍑嗙‘鐨勫垽瀹氾紱100涓?
+# 鐢?锛?宸﹀彸鐨剄:d鐨勬瘮渚嬶紝鍘昏窇simulation锛涚敤q鍜宒鍙戠幇鐨勮妭鐐瑰杺缁欏ぇ妯″瀷鍒ゆ柇鍏朵竴鑷存€э紝杈撳嚭浠栬涓烘墍鍖归厤鐨勮妭鐐瑰拰鍐茬獊鐨勮妭鐐癸紝**match鐨勫畾涔?*
 
-# 1. 该匹配的没匹配上
-# 2. 不该匹配（冲突的）的匹配上了
-# 3. 没匹配但不冲突的匹配上了
+# 1. 璇ュ尮閰嶇殑娌″尮閰嶄笂
+# 2. 涓嶈鍖归厤锛堝啿绐佺殑锛夌殑鍖归厤涓婁簡
+# 3. 娌″尮閰嶄絾涓嶅啿绐佺殑鍖归厤涓婁簡
+
+

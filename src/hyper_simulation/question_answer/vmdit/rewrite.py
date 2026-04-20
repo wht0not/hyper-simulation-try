@@ -1,6 +1,6 @@
-import json
-from hyper_simulation.llm.prompt.vmdit import rewrite
-from hyper_simulation.llm.chat_completion import get_invoke_prompt
+﻿import json
+from hyper_simulation.prompt.vmdit import rewrite
+from hyper_simulation.utils.chat_completion import get_invoke_prompt
 from tqdm import tqdm
 
 def read_evi(file_path):
@@ -73,6 +73,7 @@ if __name__=='__main__':
     json_data_2 = json.dumps(error_q)
     with open("new_query/popqa_q_0.jsonl", "w") as file:
         file.write(json_data_1)
+
 
 
 

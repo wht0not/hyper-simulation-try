@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -12,8 +12,8 @@ from tqdm import tqdm
 
 from hyper_simulation.baselines.CDIT import judge_similarity_batch
 from hyper_simulation.baselines.contradoc import judge_contradiction_batch
-from hyper_simulation.llm.chat_completion import get_invoke
-from hyper_simulation.llm.prompt.arc import ARC_BASE
+from hyper_simulation.utils.chat_completion import get_invoke
+from hyper_simulation.prompt.arc import ARC_BASE
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	match,
@@ -88,7 +88,7 @@ def _coerce_reference_answers(value: Any) -> list[str]:
 				if v and v != "[]":
 					res.append(v)
 			elif isinstance(one, list):
-				# 兼容 reference_answer=[[]] 这种脏数据
+				# 鍏煎 reference_answer=[[]] 杩欑鑴忔暟鎹?
 				continue
 		return res
 	return []
@@ -678,3 +678,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

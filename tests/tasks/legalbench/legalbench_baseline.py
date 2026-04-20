@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import json
@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from hyper_simulation.baselines.CDIT import judge_similarity_batch
 from hyper_simulation.baselines.contradoc import judge_contradiction_batch
-from hyper_simulation.llm.chat_completion import get_invoke
+from hyper_simulation.utils.chat_completion import get_invoke
 from hyper_simulation.question_answer.vmdit.metrics import (
 	exact_match_score,
 	match,
@@ -151,7 +151,7 @@ def _load_direct_prompt_rows(method: str, prompts_root: Path, limit: int | None 
 		if root.exists():
 			candidates.extend(sorted(root.glob(f"*/prompts/{method}_prompts.jsonl")))
 
-	# 去重并按路径稳定排序
+	# 鍘婚噸骞舵寜璺緞绋冲畾鎺掑簭
 	seen: set[str] = set()
 	unique_candidates: list[Path] = []
 	for path in sorted(candidates):
@@ -666,3 +666,4 @@ def main() -> None:
 
 if __name__ == "__main__":
 	main()
+

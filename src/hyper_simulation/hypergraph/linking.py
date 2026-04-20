@@ -1,4 +1,4 @@
-import json
+﻿import json
 from pathlib import Path
 import concurrent.futures
 import threading
@@ -9,7 +9,7 @@ import requests
 
 from hyper_simulation.component.nli import get_nli_entailment_score_batch
 from hyper_simulation.hypergraph.entity import ENT
-from hyper_simulation.llm.chat_completion import get_generate
+from hyper_simulation.utils.chat_completion import get_generate
 
 
 class WikidataTagger:
@@ -361,4 +361,5 @@ if __name__ == "__main__":
     ]
     for text, context in samples:
         ent = tagger.get_entity_for_text(text, context)
-        print(f"Text: '{text}' | Context: '{context}' → ENT: {ent.name}")
+        print(f"Text: '{text}' | Context: '{context}' 鈫?ENT: {ent.name}")
+

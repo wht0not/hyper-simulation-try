@@ -1,6 +1,6 @@
-"""
-批量将文本转换为超图并保存为 pkl 文件
-在 spacy-1 环境中运行
+﻿"""
+鎵归噺灏嗘枃鏈浆鎹负瓒呭浘骞朵繚瀛樹负 pkl 鏂囦欢
+鍦?spacy-1 鐜涓繍琛?
 """
 import sys
 import os
@@ -14,7 +14,7 @@ from fastcoref import spacy_component
 
 from combine import combine, calc_correfs_str
 from dependency import Dependency, Node, LocalDoc
-from hypergraph import Hypergraph as LocalHypergraph
+from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph
 
 ROOT = Path(__file__).resolve().parents[0]
 if str(ROOT) not in sys.path:
@@ -84,7 +84,7 @@ def text_to_hypergraph(nlp, text: str) -> LocalHypergraph:
 def main():
     # Configuration
     select_data_dir = os.path.join(ROOT, "select_data")
-    hypergraph_dir = os.path.join(ROOT, "hypergraphs")  # 保存超图的目录
+    hypergraph_dir = os.path.join(ROOT, "hypergraphs")  # 淇濆瓨瓒呭浘鐨勭洰褰?
     # Optional limits for quick tests
     try:
         limit_items = int(os.environ.get("BATCH_LIMIT_ITEMS", "0"))
@@ -173,4 +173,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

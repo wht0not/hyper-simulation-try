@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Any, Dict, Set, Tuple, List
 import networkx as nx
@@ -12,13 +12,13 @@ from hyper_simulation.query_instance import QueryInstance
 
 def graph_to_networkx(graph: Graph, default_bound: int = 5) -> nx.DiGraph:
 	"""
-	将本地 Graph 转换为 networkx.DiGraph
+	灏嗘湰鍦?Graph 杞崲涓?networkx.DiGraph
 	
-	使用 Graph 类的 vertices 和 edges 属性
+	浣跨敤 Graph 绫荤殑 vertices 鍜?edges 灞炴€?
 	"""
 	nx_graph = nx.DiGraph()
 	
-	# 添加节点
+	# 娣诲姞鑺傜偣
 	for vertex in graph.vertices:
 		nx_graph.add_node(
 			vertex.id,
@@ -27,7 +27,7 @@ def graph_to_networkx(graph: Graph, default_bound: int = 5) -> nx.DiGraph:
 			text=vertex.text(),
 		)
 	
-	# 添加边
+	# 娣诲姞杈?
 	for edge in graph.edges:
 		nx_graph.add_edge(
 			edge.src.id,
@@ -58,23 +58,23 @@ def get_bsim_baseline(
 	is_label_cached: bool = False,
 ) -> Dict[int, Set[int]]:
 	"""
-	运行 Bounded Simulation Baseline (BSIM)
+	杩愯 Bounded Simulation Baseline (BSIM)
 	
 	Returns:
-		Dict[query_node_id, Set[data_node_ids]] - 每个查询节点匹配的数据节点集合
+		Dict[query_node_id, Set[data_node_ids]] - 姣忎釜鏌ヨ鑺傜偣鍖归厤鐨勬暟鎹妭鐐归泦鍚?
 	"""
-	# 1. Hypergraph → Graph (使用现有的 from_hypergraph 方法)
+	# 1. Hypergraph 鈫?Graph (浣跨敤鐜版湁鐨?from_hypergraph 鏂规硶)
 	graph1 = Graph.from_hypergraph(hypergraph1)
 	graph2 = Graph.from_hypergraph(hypergraph2)
 	
-	# 2. Graph → networkx.DiGraph
+	# 2. Graph 鈫?networkx.DiGraph
 	nx_graph1 = graph_to_networkx(graph1, default_bound)
 	nx_graph2 = graph_to_networkx(graph2, default_bound)
 	
-	# 3. 预计算兼容性表
+	# 3. 棰勮绠楀吋瀹规€ц〃
 	compare_table = build_compare_table(graph1, graph2)
 	
-	# 4. 定义 compare 和 bound 回调
+	# 4. 瀹氫箟 compare 鍜?bound 鍥炶皟
 	def compare(attr1: Dict[str, Any], attr2: Dict[str, Any]) -> bool:
 		q_id = attr1.get("vertex_id")
 		d_id = attr2.get("vertex_id")
@@ -85,10 +85,10 @@ def get_bsim_baseline(
 	def bound(*_args: Any, **_kwargs: Any) -> int:
 		return default_bound
 	
-	# 5. 运行有界模拟
+	# 5. 杩愯鏈夌晫妯℃嫙
 	raw_simulation = get_bounded_simulation(nx_graph1, nx_graph2, compare, bound, is_label_cached=is_label_cached)
 	
-	# 6. 规范化输出 (确保 node_id 是 int)
+	# 6. 瑙勮寖鍖栬緭鍑?(纭繚 node_id 鏄?int)
 	normalized: Dict[int, Set[int]] = {}
 	for src_node, target_nodes in raw_simulation.items():
 		src_id = src_node if isinstance(src_node, int) else getattr(src_node, 'id', src_node)
@@ -107,7 +107,7 @@ def run_bsim_for_query(
 	default_bound: int = 5,
 ) -> QueryInstance:
 	"""
-	对单个 QueryInstance 运行 BSIM 匹配
+	瀵瑰崟涓?QueryInstance 杩愯 BSIM 鍖归厤
 	"""
 	query_hg, context_hgs = load_hypergraphs_for_instance(qi, dataset_name=task, base_dir=hypergraph_dir)
 	
@@ -127,3 +127,4 @@ def run_bsim_for_query(
 		qi.fixed_data = qi.data
 	
 	return qi
+

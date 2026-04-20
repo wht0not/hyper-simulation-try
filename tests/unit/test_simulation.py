@@ -1,8 +1,8 @@
-import sys
+﻿import sys
 from pathlib import Path
 
-from hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex, DebugLogger
-from nli import get_nli_labels_batch
+from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex, DebugLogger
+from hyper_simulation.component.nli import get_nli_labels_batch
 from simulation import Hypergraph as SimHypergraph, Hyperedge as SimHyperedge, Node, Delta, DMatch
 
 ROOT = Path(__file__).resolve().parents[0]
@@ -82,7 +82,7 @@ def build_delta_and_dmatch(
     allowed_pairs: set[tuple[int, int]],
 ) -> tuple[Delta, DMatch]:
     """Register each allowed node pair as a semantic cluster pair and build DMatch."""
-    delta = Delta() # 看这个计算结果目前是多少pairs
+    delta = Delta() # 鐪嬭繖涓绠楃粨鏋滅洰鍓嶆槸澶氬皯pairs
     d_delta_matches: dict[tuple[int, int], set[tuple[int, int]]] = {}
     for q_id, d_id in sorted(allowed_pairs):
         cluster_u = query_node_edges.get(q_id, [])
@@ -138,8 +138,10 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# 目标：
-# 1. 文本有冲突能检查出来
-# 2. 现有冲突没有沿着超边进行传递
+# 鐩爣锛?
+# 1. 鏂囨湰鏈夊啿绐佽兘妫€鏌ュ嚭鏉?
+# 2. 鐜版湁鍐茬獊娌℃湁娌跨潃瓒呰竟杩涜浼犻€?
 
-# 冲突的结果和不冲突的结果 Boundary的设定
+# 鍐茬獊鐨勭粨鏋滃拰涓嶅啿绐佺殑缁撴灉 Boundary鐨勮瀹
+
+
