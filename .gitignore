@@ -26,3 +26,4 @@ logs/
 logs_1/
 
 *.lock
+paper/
