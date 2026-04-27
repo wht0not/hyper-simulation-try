@@ -1,4 +1,4 @@
-﻿import json
+import json
 import re
 import jsonlines
 import argparse
@@ -190,6 +190,9 @@ def run_rag_evaluation(
     use_supporting_only: bool = True  # 馃攽 鏂板鍙傛暟
 ):
     """杩愯 MuSiQue RAG 璇勪及浠诲姟"""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be greater than 0")
+
     print(f"Loading data from {data_path}...")
     print(f"Use supporting paragraphs only: {use_supporting_only}")
     data: List[Dict[str, Any]] = load_musique_data(data_path, use_supporting_only=use_supporting_only)
@@ -219,8 +222,8 @@ def run_rag_evaluation(
     debug_count = 0
     
     for batch_start in tqdm(range(0, len(data), batch_size), desc="Processing batches", position=0, leave=True):
-        assert batch_start + batch_size <= len(data) 
-        batch = data[batch_start:(batch_start + batch_size)]
+        batch_end = min(batch_start + batch_size, len(data))
+        batch = data[batch_start:batch_end]
         
         # 鏋勫缓 QueryInstance
         query_instances = []
@@ -353,6 +356,8 @@ def main():
                         help='Only use supporting paragraphs (default: True)')
 
     args = parser.parse_args()
+    if args.batch_size <= 0:
+        parser.error("--batch_size 必须大于 0")
     build_flag = args.build == False
     rebuild_flag = args.rebuild == True
     

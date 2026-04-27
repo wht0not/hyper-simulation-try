@@ -1,4 +1,4 @@
-﻿[workspace]
+[workspace]
 authors = ["RaVincentHuang <18573104293@163.com>"]
 channels = ["conda-forge"]
 name = "hyper-simulation"

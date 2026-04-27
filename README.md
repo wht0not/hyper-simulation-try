@@ -1,52 +1,51 @@
-# hyper-simulation
+# Hyper Simulation
 
+A powerful python project for hypergraph simulation, focusing on knowledge reasoning and question-answering over diverse datasets like HotpotQA, MuSiQue, ConTRoL, and ECON.
 
-### Build 50
+## 🚀 Quick Start
+
+This project uses [Pixi](https://pixi.sh/) for environment and task management.
+
+### 1. Build Hypergraphs
 ```shell
-pixi run -e hypergraph build --rebuild --data_path /home/vincent/.dataset/HotpotQA/sample20distractor --task hotpotqa ; \
-pixi run -e hypergraph build --rebuild --data_path /home/vincent/.dataset/musique/sample50/musique.jsonl --task musique
+# Build for HotpotQA
+pixi run -e hypergraph build --rebuild --data_path /path/to/dataset --task hotpotqa
+
+# Build for MuSiQue
+pixi run -e hypergraph build --rebuild --data_path /path/to/dataset --task musique
 ```
 
-### RUN 50
+### 2. Run Simulations
 ```shell
-
-pixi run -e simulation hyper_simulation --data_path /home/vincent/.dataset/HotpotQA/sample20distractor --task hotpotqa ; \
-pixi run -e simulation hyper_simulation --data_path /home/vincent/.dataset/musique/sample50/musique.jsonl --task musique
-
+# Run Hyper Simulation
+pixi run -e simulation hyper_simulation --data_path /path/to/dataset --task <task_name>
 ```
 
-```
-pixi run -e hypergraph build  --data_path /home/vincent/.dataset/HotpotQA/sample20distractor --task hotpotqa ; \
-pixi run -e hypergraph build  --data_path /home/vincent/.dataset/musique/sample50/musique.jsonl --task musique; \
-pixi run -e simulation hyper_simulation --data_path /home/vincent/.dataset/HotpotQA/sample20distractor --task hotpotqa ; \
-pixi run -e simulation hyper_simulation --data_path /home/vincent/.dataset/musique/sample50/musique.jsonl --task musique
-```
+### 3. Baselines & Debugging
+- **Run Baseline (e.g., Contradoc)**: 
+  ```shell
+  pixi run -e simulation rag_no_retrival --data_path /path/to/dataset --output_path data/baseline/contradoc --method contradoc --task musique
+  ```
+- **SpaCy Debugging**:
+  ```shell
+  pixi run -e hypergraph display --steps 1
+  ```
 
-### Musique
-```shell
+## 📊 Scalability & Performance
+The project includes a comprehensive scalability analysis across multiple datasets:
+- **ECON**: Most efficient (≤15.5s total for 100 instances).
+- **HotpotQA & MuSiQue**: Execution times scale linearly with parameter `b` and are heavily influenced by `sigma`.
+- **Delta Parameter**: Minimal impact on overall execution time (~1-2% variance).
 
-pixi run -e simulation rag_no_retrival --data_path /home/vincent/.dataset/musique/sample50/musique.jsonl --output_path data/baseline/contradoc/musique --method contradoc --task musique
+*For detailed analysis, refer to [Scalability.md](Scalability.md).*
+*To run time benchmarks, execute `sh scripts/run/time_benchmark.sh`.*
 
-```
-
-### TEST BUILD
-```shell
-pixi run -e hypergraph test_build --data_path /home/vincent/.dataset/HotpotQA/sample20distractor --output_dir data/playground/hypergraph --task hotpotqa ; \
-pixi run -e hypergraph test_build --data_path /home/vincent/.dataset/musique/sample50/musique_answerable.jsonl --output_dir data/playground/hypergraph --task musique; \
-pixi run -e hypergraph test_build --data_path /home/vincent/.dataset/MultiHop/sample50/multihop_rag.jsonl --output_dir data/playground/hypergraph --task multihop
-```
-
-### SpaCy Debugging
-```shell
-pixi run -e hypergraph display --steps 1
-```
-
-### Local Model
+## ⚙️ Offline Mode (Local Models)
+For offline environments, set the following environment variables before running:
 ```shell
 export TRANSFORMERS_OFFLINE="1"
 export HF_DATASETS_OFFLINE="1"
-```
 
-pixi run -e simulation remote --task docnli --dataset-path data/nli/docnli_50.jsonl --source-root data/debug/docnli/sample50 --max-workers 8 && \
-pixi run -e simulation remote --task econ --dataset-path data/nli/econ_qa.jsonl --source-root data/debug/econ/sample --max-workers 8 && \
-pixi run -e simulation remote --task contract_nli --dataset-path data/nli/contract_nli_split_sample65.jsonl --source-root data/debug/contract_nli/sample65 --max-workers 8
+# Example run with local models
+pixi run -e simulation remote --task docnli --dataset-path data/nli/docnli_50.jsonl --source-root data/debug/docnli/sample50 --max-workers 8
+```

@@ -1,7 +1,7 @@
-﻿import sys
+import sys
 from pathlib import Path
 
-from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex, DebugLogger
+from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex
 from hyper_simulation.component.nli import get_nli_labels_batch
 from simulation import Hypergraph as SimHypergraph, Hyperedge as SimHyperedge, Node, Delta, DMatch
 
@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[0]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-log_path = DebugLogger.init("NER-wordnet-wikidata.txt")
+
 
 QUERY_FILE = "data/hypergraph/query_hypergraph.pkl"
 DATA_FILE = "data/hypergraph/data_hypergraph.pkl"
@@ -133,7 +133,7 @@ def main() -> None:
     )
     sim = SimHypergraph.get_hyper_simulation(query, data, delta, d_match)
     format_result("get_hyper_simulation:", sim, query_texts, data_texts)
-    DebugLogger.close()
+
 
 if __name__ == "__main__":
     main()

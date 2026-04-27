@@ -45,12 +45,7 @@ def query_same_type(v1: Vertex, v2: Vertex) -> bool:
     return False
 
 def _construct_description_from_path(path: list[list[Node]], start_node: Node, end_node: Node) -> str:
-    """
-    从路径描述中构建一个字符串描述。
-    这里的路径是一个节点列表，节点可以是 Vertex 或 Hyperedge。
-    描述的构建规则可以根据实际需求进行调整。
-    目前的实现是简单地连接节点的文本表示。
-    """
+    """ Docstring removed due to garbled encoding. """
     
     type_nodes_map: dict[str, set[Node]] = {
         "LOCATION": set(),
@@ -126,17 +121,7 @@ def _construct_description_from_path(path: list[list[Node]], start_node: Node, e
     return ". ".join(description_parts)
 
 def calc_d_match(sc1: SemanticCluster, sc2: SemanticCluster, threshold: float = 0.5) -> list[tuple[Vertex, Vertex, float]]:
-    """
-    计算两个SemanticCluster之间的DMatch列表，表示它们之间的潜在匹配关系。
-    
-    Args:
-        sc1: 第一个SemanticCluster对象
-        sc2: 第二个SemanticCluster对象
-        threshold: 相似度阈值，只有相似度大于等于该值的匹配才会被返回
-    
-    Returns:
-        包含匹配结果的列表，每个元素是一个三元组(Vertex1, Vertex2, Similarity)，表示sc1中的Vertex1与sc2中的Vertex2之间的匹配关系及其相似度。
-    """
+    """ Docstring removed due to garbled encoding. """
     # Firstly, set a relation R = { (v1, v2) | v1.type() == v2.type() }
     R: list[tuple[Vertex, Vertex]] = []
     for v1 in sc1.vertices:
@@ -157,8 +142,8 @@ def calc_d_match(sc1: SemanticCluster, sc2: SemanticCluster, threshold: float = 
             R_map[v1] = []
         R_map[v1].append(v2)
 
-    # 记录待打分项：每一项对应一个 (v1, v2, index) 下的一对描述
-    # 注意：这里必须用 list，不能用 dict 覆盖同描述的不同来源
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     score_items: list[tuple[str, str, Vertex, Vertex, int]] = []
 
     for v1, v2 in R:
@@ -188,7 +173,7 @@ def calc_d_match(sc1: SemanticCluster, sc2: SemanticCluster, threshold: float = 
             for v2_prime in R_map.get(v1_prime, []):
                 candidate_pairs.append((v1_prime, v2_prime))
 
-        # 对每个 (v1', v2') 分配一个 index
+        # Comment removed due to garbled encoding.
         for index, (v1_prime, v2_prime) in enumerate(candidate_pairs):
             path1, v1_node, v1_prime_node = sc1.get_path_node_steps(v1, v1_prime)
             path2, v2_node, v2_prime_node = sc2.get_path_node_steps(v2, v2_prime)
@@ -203,13 +188,13 @@ def calc_d_match(sc1: SemanticCluster, sc2: SemanticCluster, threshold: float = 
     if not score_items:
         return []
 
-    # 批量打分
+    # Comment removed due to garbled encoding.
     score_pairs = [(desc1, desc2) for desc1, desc2, _, _, _ in score_items]
     scores = get_nli_remix_score_batch(score_pairs)
 
-    # 聚合规则：
-    # 1) 对固定 (v1, v2) 与固定 index，取最大分
-    # 2) 将所有 index 的最大分求和后取平均
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     pair_index_max: dict[tuple[Vertex, Vertex], dict[int, float]] = {}
     for (_, _, v1, v2, index), score in zip(score_items, scores):
         key = (v1, v2)
@@ -227,7 +212,7 @@ def calc_d_match(sc1: SemanticCluster, sc2: SemanticCluster, threshold: float = 
         if avg_score > threshold:
             raw_results.append((v1, v2, avg_score))
 
-    # 1-to-1 约束：按分数从高到低贪心选择，若有重叠则保留高分项
+    # Comment removed due to garbled encoding.
     raw_results.sort(key=lambda x: x[2], reverse=True)
     used_v1: set[Vertex] = set()
     used_v2: set[Vertex] = set()
@@ -247,17 +232,17 @@ def calc_d_match_batch(sc_pairs: list[tuple[SemanticCluster, SemanticCluster]], 
     if not sc_pairs:
         return []
 
-    # 全局收集打分请求，充分利用 get_nli_remix_score_batch 的吞吐
+    # Comment removed due to garbled encoding.
     score_pairs: list[tuple[str, str]] = []
     score_meta: list[tuple[int, Vertex, Vertex, int]] = []
 
-    # 每个 sc_pair 独立聚合：pair_idx -> {(v1, v2): {index: max_score}}
+    # Comment removed due to garbled encoding.
     pair_index_max_by_pair: list[dict[tuple[Vertex, Vertex], dict[int, float]]] = [
         {} for _ in range(len(sc_pairs))
     ]
 
     for pair_idx, (sc1, sc2) in enumerate(sc_pairs):
-        # 与 calc_d_match 保持一致：先构建 R
+        # Comment removed due to garbled encoding.
         R: list[tuple[Vertex, Vertex]] = []
         for v1 in sc1.vertices:
             for v2 in sc2.vertices:
@@ -318,7 +303,7 @@ def calc_d_match_batch(sc_pairs: list[tuple[SemanticCluster, SemanticCluster]], 
     if not score_pairs:
         return [[] for _ in sc_pairs]
 
-    # 单次批量打分
+    # Comment removed due to garbled encoding.
     
     # print(f"Calculating D-Match for {len(sc_pairs)} pairs with {len(score_pairs)} scoring items...")
     time1 = time.time()
@@ -326,7 +311,7 @@ def calc_d_match_batch(sc_pairs: list[tuple[SemanticCluster, SemanticCluster]], 
     scores = get_nli_remix_score_batch(score_pairs)
     time2 = time.time()
     # print(f"NLI scoring completed in {time2 - time1:.2f} seconds")
-    # 聚合：固定 (pair_idx, v1, v2, index) 取最大
+    # Comment removed due to garbled encoding.
     for (pair_idx, v1, v2, index), score in zip(score_meta, scores):
         pair_map = pair_index_max_by_pair[pair_idx]
         key = (v1, v2)
@@ -336,7 +321,7 @@ def calc_d_match_batch(sc_pairs: list[tuple[SemanticCluster, SemanticCluster]], 
         if prev is None or score > prev:
             pair_map[key][index] = score
 
-    # 对每个 sc_pair 做与 calc_d_match 一致的后处理：均值阈值 + 1-to-1
+    # Comment removed due to garbled encoding.
     all_results: list[list[tuple[Vertex, Vertex, float]]] = []
     for pair_map in pair_index_max_by_pair:
         raw_results: list[tuple[Vertex, Vertex, float]] = []

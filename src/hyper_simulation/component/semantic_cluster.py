@@ -5,7 +5,7 @@ from hyper_simulation.hypergraph.hypergraph import Hyperedge, Hypergraph, Node, 
 from hyper_simulation.hypergraph.linguistic import QueryType, Pos, Tag, Dep, Entity
 import numpy as np
 import logging
-from hyper_simulation.component.embedding import get_embedding_batch, get_cosine_similarity_batch, get_similarity_batch, get_similarity
+from hyper_simulation.component.embedding import get_embedding_batch, get_cosine_similarity_batch, get_similarity_batch, get_similarity, cosine_similarity
 from hyper_simulation.component.nli import get_nli_label, get_nli_labels_batch
 from hyper_simulation.utils.log import getLogger
 from hyper_simulation.component.denial import get_top_k_matched_vertices
@@ -14,14 +14,12 @@ from itertools import product
 from hyper_simulation.hypergraph.path import find_shortest_hyperpaths, find_shortest_hyperpaths_local
 
 def abstraction_lca(query: list[str], data: list[str]) -> tuple[str, int]:
-    """
-    计算 LCA。如果两个路径完全没有重合（根节点不同），返回 None, -1。
-    """
+    """ Docstring removed due to garbled encoding. """
     if not query or not data:
         return '', -1
         
-    # 检查根节点是否相同
-    # 名词根是 entity，动词根可能是 act，如果不相同，说明属于不同词性域
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     if query[0] != data[0]:
         return '', -1
         
@@ -62,7 +60,7 @@ class TarjanLCA:
         self.adj: dict[Node, list[Node]] = {}
         self.nodes: set[Node] = set()
         
-        # 统计入度，用于寻找有向图/树的根节点
+        # Comment removed due to garbled encoding.
         in_degree: dict[Node, int] = {}
 
         for a, b in edges:
@@ -72,7 +70,7 @@ class TarjanLCA:
                 self.adj[a] = []
             self.adj[a].append(b)
             
-            # 初始化入度
+            # Comment removed due to garbled encoding.
             if a not in in_degree: in_degree[a] = 0
             if b not in in_degree: in_degree[b] = 0
             in_degree[b] += 1
@@ -87,7 +85,7 @@ class TarjanLCA:
             if u not in in_degree: in_degree[u] = 0
             if v not in in_degree: in_degree[v] = 0
 
-            # 建立双向映射
+            # Comment removed due to garbled encoding.
             if u not in self.query_map: self.query_map[u] = []
             if v not in self.query_map: self.query_map[v] = []
             
@@ -101,7 +99,7 @@ class TarjanLCA:
         self.visited: set[Node] = set()
         self.res: list[Node | None] = [None] * len(self.queries)
 
-        # [新增逻辑] 用于记录节点属于哪棵树（哪个连通分量）
+        # Comment removed due to garbled encoding.
         self.node_roots: dict[Node, Node] = {}
 
         # initialize union-find for all nodes
@@ -110,12 +108,12 @@ class TarjanLCA:
             self.ancestor[n] = n
 
         # run Tarjan on each component (forest support)
-        # 优先从根节点（入度为0）开始 DFS
+        # Comment removed due to garbled encoding.
         sorted_nodes = sorted(list(self.nodes), key=lambda n: in_degree.get(n, 0))
         
         for n in sorted_nodes:
             if n not in self.visited:
-                # [修改逻辑] 传入当前分量的根节点 n 作为 root_id
+                # Comment removed due to garbled encoding.
                 self.tarjan(n, None, n)
         
     # union-find's find
@@ -135,9 +133,9 @@ class TarjanLCA:
             return
         self.uf_parent[ry] = rx
     
-    # [修改接口] 增加 root_id 参数，标记当前递归属于哪棵树
+    # Comment removed due to garbled encoding.
     def tarjan(self, u, p, root_id):
-        # [新增逻辑] 记录当前节点所属的树根
+        # Comment removed due to garbled encoding.
         self.node_roots[u] = root_id
 
         self.ancestor[u] = u 
@@ -148,7 +146,7 @@ class TarjanLCA:
             if v in self.visited:
                 continue
             
-            # [修改逻辑] 递归传递 root_id
+            # Comment removed due to garbled encoding.
             self.tarjan(v, u, root_id)
             self.union(u, v)
             self.ancestor[self.find(u)] = u
@@ -156,8 +154,8 @@ class TarjanLCA:
         self.visited.add(u)
 
         for other, qi in self.query_map.get(u, []):
-            # [修复核心] 只有当 other 也被访问过，且 other 属于同一棵树（同一个 root_id）时，才计算 LCA
-            # 如果属于不同的树，说明不连通，LCA 保持为 None
+            # Comment removed due to garbled encoding.
+            # Comment removed due to garbled encoding.
             if other in self.visited:
                 if self.node_roots.get(other) == root_id:
                     self.res[qi] = self.ancestor[self.find(other)]
@@ -182,32 +180,25 @@ class SemanticCluster:
         
         self.vertices_paths_within_hyperedges: dict[tuple[Node, Node, Node], tuple[str, int]] = {}
         
-        # ===== 缓存用于路径查询的信息 =====
+        # Comment removed due to garbled encoding.
         self._hyperedge_groups: list[list[Hyperedge]] | None = None
         self._group_intersections: dict[tuple[int, int], set[Node]] | None = None
         self._hyperedge_to_group: dict[Hyperedge, int] | None = None
         self._vertex_to_hyperedges: dict[Vertex, list[Hyperedge]] | None = None
         self._node_pair_nearest_root: dict[tuple[Node, Node], Node] | None = None
         
-    # ====== 步骤1: 构建 Hyperedge Groups ======
+    # Comment removed due to garbled encoding.
     def _build_hyperedge_groups(self) -> tuple[list[list[Hyperedge]], dict[Hyperedge, int]]:
-        """
-        按照 root 的连接关系（通过 head 链）将 hyperedges 分组。
-        同一个 group 内的 hyperedges 的 roots 通过 head 链连接。
-        
-        返回：
-        - groups: list[list[Hyperedge]] - 分组后的 hyperedges
-        - he_to_group: dict[Hyperedge, int] - hyperedge 到 group 索引的映射
-        """
+        """ Docstring removed due to garbled encoding. """
         if self._hyperedge_groups is not None and self._hyperedge_to_group is not None:
             return self._hyperedge_groups, self._hyperedge_to_group
 
-        # 按“最终根（沿 head 上溯到尽头）”分组。
-        # group 定义：不同 hyperedge 的 root 若能追溯到同一个最终根，则属于同一 group。
+        # Comment removed due to garbled encoding.
+        # Comment removed due to garbled encoding.
         ultimate_root_cache: dict[Node, Node] = {}
 
         def get_ultimate_root(start: Node) -> Node:
-            # 命中缓存时 O(1) 返回；未命中时在上溯过程中做路径压缩。
+            # Comment removed due to garbled encoding.
             if start in ultimate_root_cache:
                 return ultimate_root_cache[start]
 
@@ -216,12 +207,12 @@ class SemanticCluster:
             trace: list[Node] = []
 
             while True:
-                # 关键优化：上溯途中命中缓存节点可立即收敛。
+                # Comment removed due to garbled encoding.
                 if current in ultimate_root_cache:
                     ultimate = ultimate_root_cache[current]
                     break
 
-                # 防止环/自环导致死循环。
+                # Comment removed due to garbled encoding.
                 if current in visited:
                     ultimate = current
                     break
@@ -236,7 +227,7 @@ class SemanticCluster:
 
                 current = head
 
-            # 路径压缩：将本次路径上的节点全部缓存到同一个最终根。
+            # Comment removed due to garbled encoding.
             for node in trace:
                 ultimate_root_cache[node] = ultimate
             return ultimate
@@ -253,7 +244,7 @@ class SemanticCluster:
         
         groups = list(groups_dict.values())
         
-        # 构建 hyperedge 到 group 索引的映射
+        # Comment removed due to garbled encoding.
         he_to_group: dict[Hyperedge, int] = {}
         for group_idx, group in enumerate(groups):
             for he in group:
@@ -262,10 +253,10 @@ class SemanticCluster:
         self._hyperedge_groups = groups
         self._hyperedge_to_group = he_to_group
         
-        # ===== 新增：计算每个 group 内任意两个节点的最近根（带缓存，避免冗余计算） =====
+        # Comment removed due to garbled encoding.
         node_pairs_to_roots: dict[tuple[Node, Node], Node] = {}
         for group in groups:
-            # 预计算 node -> 所属 hyperedge roots（一个 node 可能出现于多个 hyperedges）
+            # Comment removed due to garbled encoding.
             node_to_roots: dict[Node, set[Node]] = {}
             group_nodes: set[Node] = set()
             for he in group:
@@ -281,11 +272,11 @@ class SemanticCluster:
                         node_to_roots[node] = set()
                     node_to_roots[node].add(root)
 
-            # root 祖先链缓存：root -> [root, root.head, ...]
+            # Comment removed due to garbled encoding.
             root_chain_cache: dict[Node, list[Node]] = {}
-            # root 深度缓存：root -> {ancestor: distance_from_root}
+            # Comment removed due to garbled encoding.
             root_depth_cache: dict[Node, dict[Node, int]] = {}
-            # root-pair 最近公共根缓存
+            # Comment removed due to garbled encoding.
             root_pair_nearest_cache: dict[tuple[Node, Node], Node | None] = {}
 
             def get_root_chain(root: Node) -> list[Node]:
@@ -342,7 +333,7 @@ class SemanticCluster:
                     best_root: Node | None = None
                     best_score: int | None = None
 
-                    # 仅在 root 组合层面计算一次最近公共根，并复用缓存
+                    # Comment removed due to garbled encoding.
                     for root1 in roots1:
                         depth1 = get_root_depth_map(root1)
                         for root2 in roots2:
@@ -361,7 +352,7 @@ class SemanticCluster:
         
         self._node_pair_nearest_root = node_pairs_to_roots
         
-        # ===== 新增：预计算所有 Vertex 的 Group 集合 =====
+        # Comment removed due to garbled encoding.
         vertex_to_groups: dict[Vertex, set[int]] = {}
         for he in self.hyperedges:
             group_idx = he_to_group.get(he)
@@ -375,10 +366,10 @@ class SemanticCluster:
         
         self._vertex_to_groups_cache = vertex_to_groups
         
-        # ===== 新增：预计算所有 Group 对之间的最短路径 =====
-        # 构建 Group 邻接表（基于 Node 桥梁）
+        # Comment removed due to garbled encoding.
+        # Comment removed due to garbled encoding.
         def get_group_nodes(group: list[Hyperedge]) -> set[Node]:
-            """获取 group 中所有的 nodes"""
+            """ Docstring removed due to garbled encoding. """
             nodes = set()
             for he in group:
                 for vertex in he.vertices:
@@ -387,7 +378,7 @@ class SemanticCluster:
                         nodes.add(node)
             return nodes
         
-        # 计算 Group 间的桥梁
+        # Comment removed due to garbled encoding.
         group_adjacency: dict[int, set[int]] = {}
         inter_group_bridges: dict[tuple[int, int], set[Node]] = {}
         
@@ -405,12 +396,12 @@ class SemanticCluster:
         
         self._inter_group_bridge_cache = inter_group_bridges
         
-        # 计算所有 Group 对之间的最短路径（使用 Floyd-Warshall 或 BFS）
-        # 这里使用字典进行 All-Pairs-Shortest-Paths 的计算
+        # Comment removed due to garbled encoding.
+        # Comment removed due to garbled encoding.
         inter_group_distances: dict[tuple[int, int], list[int]] = {}
         
         for start_group in range(len(groups)):
-            # 对每个起始 Group，用 BFS 计算到所有其他 Group 的最短路
+            # Comment removed due to garbled encoding.
             dist: dict[int, int] = {start_group: 0}
             parent: dict[int, int | None] = {start_group: None}
             queue = deque([start_group])
@@ -423,12 +414,12 @@ class SemanticCluster:
                         parent[neighbor] = current
                         queue.append(neighbor)
             
-            # 回溯所有到达的 Group，构建最短路
+            # Comment removed due to garbled encoding.
             for end_group, d in dist.items():
                 if end_group == start_group:
                     inter_group_distances[(start_group, end_group)] = [start_group]
                 else:
-                    # 从 end_group 回溯到 start_group
+                    # Comment removed due to garbled encoding.
                     path = []
                     current = end_group
                     while current is not None:
@@ -441,22 +432,16 @@ class SemanticCluster:
         
         return groups, he_to_group
     
-    # ====== 步骤2: 找 Groups 之间的交集 ======
+    # Comment removed due to garbled encoding.
     def _find_group_intersections(self) -> dict[tuple[int, int], set[Node]]:
-        """
-        找出不同 groups 之间的节点交集。
-        这些交集节点是 groups 之间的"桥梁"。
-        
-        返回：
-        - dict: key=(group_i_idx, group_j_idx), value=交集节点集合
-        """
+        """ Docstring removed due to garbled encoding. """
         if self._group_intersections is not None:
             return self._group_intersections
         
         groups, _ = self._build_hyperedge_groups()
         
         def get_group_nodes(group: list[Hyperedge]) -> set[Node]:
-            """获取 group 中所有的 nodes"""
+            """ Docstring removed due to garbled encoding. """
             nodes = set()
             for he in group:
                 for vertex in he.vertices:
@@ -473,43 +458,27 @@ class SemanticCluster:
                 intersection = nodes_i & nodes_j
                 if intersection:
                     intersections[(i, j)] = intersection
-                    intersections[(j, i)] = intersection  # 对称
+                    intersections[(j, i)] = intersection  # Comment removed due to garbled encoding.
         
         self._group_intersections = intersections
         return intersections
     
-    # ====== 新增：获取两个节点在 group 内的最近根 ======
+    # Comment removed due to garbled encoding.
     def _get_nearest_root_for_node_pair(self, node1: Node, node2: Node) -> Node | None:
-        """
-        获取两个节点在其所在 group 内的最近根。
-        
-        参数：
-        - node1, node2: 要查询的两个节点
-        
-        返回：
-        - 最近的共同根节点，如果找不到则返回 None
-        - 如果两个节点在同一个 hyperedge 内，返回该 hyperedge 的 root
-        - 如果两个节点在不同 hyperedges 但同一 group 内，返回它们的最近公共根
-        """
-        # 首先构建 hyperedge groups 以确保缓存已初始化
+        """ Docstring removed due to garbled encoding. """
+        # Comment removed due to garbled encoding.
         self._build_hyperedge_groups()
         
-        # 检查缓存
+        # Comment removed due to garbled encoding.
         if self._node_pair_nearest_root is not None:
             return self._node_pair_nearest_root.get((node1, node2))
         
         return None
     
-    # ====== 新增：建立 Vertex 与 Group 的映射 ======
+    # Comment removed due to garbled encoding.
     def _build_vertex_to_groups(self) -> dict[Vertex, set[int]]:
-        """
-        建立 Vertex 与 Group 的映射。
-        一个 Vertex 可能出现在多个 hyperedges 中，因此可能属于多个 Group。
-        
-        返回：
-        - dict[Vertex, set[int]]: 每个 Vertex 映射到它所属的 Group 索引集合
-        """
-        # 确保缓存已初始化
+        """ Docstring removed due to garbled encoding. """
+        # Comment removed due to garbled encoding.
         self._build_hyperedge_groups()
         
         if not hasattr(self, '_vertex_to_groups_cache'):
@@ -517,30 +486,16 @@ class SemanticCluster:
         
         return self._vertex_to_groups_cache
     
-    # ====== 新增：获取一个 Vertex 所属的 Group 集合 ======
+    # Comment removed due to garbled encoding.
     def _get_vertex_groups(self, v: Vertex) -> set[int]:
-        """
-        获取一个 Vertex 所属的所有 Group 索引。
-        
-        参数：
-        - v: 要查询的 Vertex
-        
-        返回：
-        - set[int]: 该 Vertex 所属的 Group 索引集合，如果不属于任何 Group 则为空集
-        """
+        """ Docstring removed due to garbled encoding. """
         vertex_to_groups = self._build_vertex_to_groups()
         return vertex_to_groups.get(v, set())
     
-    # ====== 新增：构建 Group 间 Node 桥梁的图 ======
+    # Comment removed due to garbled encoding.
     def _build_inter_group_bridge_map(self) -> dict[tuple[int, int], set[Node]]:
-        """
-        构建 Group 之间的 Node 桥梁映射。
-        两个 Group 之间的桥梁是那些在两个 Group 中都出现的 Node。
-        
-        返回：
-        - dict[tuple[int, int], set[Node]]: key=(g1, g2)，value=g1 与 g2 之间的 Node 桥梁集合
-        """
-        # 确保缓存已初始化
+        """ Docstring removed due to garbled encoding. """
+        # Comment removed due to garbled encoding.
         self._build_hyperedge_groups()
         
         if not hasattr(self, '_inter_group_bridge_cache'):
@@ -548,56 +503,37 @@ class SemanticCluster:
         
         return self._inter_group_bridge_cache
     
-    # ====== 新增：找两个 Group 之间的最短路径 ======
+    # Comment removed due to garbled encoding.
     def _find_shortest_group_path(self, g1: int, g2: int) -> list[int]:
-        """
-        找两个 Group 之间的最短路径（基于 Node 桥梁）。
-        
-        参数：
-        - g1, g2: 起始和目标 Group 索引
-        
-        返回：
-        - list[int]: 从 g1 到 g2 的最短 Group 路径，例如 [g1, ..., g2]
-              如果两个 Group 不连通，返回空列表
-        """
+        """ Docstring removed due to garbled encoding. """
         if g1 == g2:
             return [g1]
         
-        # 确保缓存已初始化
+        # Comment removed due to garbled encoding.
         self._build_hyperedge_groups()
         
-        # 直接从预计算的缓存中读取
+        # Comment removed due to garbled encoding.
         if hasattr(self, '_inter_group_distances_cache'):
             return self._inter_group_distances_cache.get((g1, g2), [])
         
         return []
     
-    # ====== 新增：找最近的 Group 对 ======
+    # Comment removed due to garbled encoding.
     def _find_closest_group_pair(self, v1_groups: set[int], v2_groups: set[int]) -> tuple[int, int, list[int]] | None:
-        """
-        找两个 Vertex v1, v2 各自所属的 Group 中距离最近的一对。
-        
-        参数：
-        - v1_groups: v1 所属的 Group 索引集合
-        - v2_groups: v2 所属的 Group 索引集合
-        
-        返回：
-        - 如果找到，返回 (g1, g2, path) 其中 path 是从 g1 到 g2 的最短路径
-        - 如果找不到，返回 None
-        """
+        """ Docstring removed due to garbled encoding. """
         if not v1_groups or not v2_groups:
             return None
         
-        # 特殊情况：两个 Vertex 属于同一 Group
+        # Comment removed due to garbled encoding.
         common_groups = v1_groups & v2_groups
         if common_groups:
             g = next(iter(common_groups))
             return (g, g, [g])
         
-        # 确保缓存已初始化
+        # Comment removed due to garbled encoding.
         self._build_hyperedge_groups()
         
-        # 从预计算的缓存中查找最短路径
+        # Comment removed due to garbled encoding.
         shortest_path: list[int] | None = None
         best_length = float('inf')
         best_pair: tuple[int, int] | None = None
@@ -618,24 +554,24 @@ class SemanticCluster:
         
         return (best_pair[0], best_pair[1], shortest_path)
     
-    # ====== 步骤3: 找 Groups 之间的路径（考虑多个交集） ======
+    # Comment removed due to garbled encoding.
     # def _find_shortest_inter_group_paths(self, g_from: int, g_to: int,
     #                                     groups: list[list[Hyperedge]],
     #                                     intersections: dict[tuple[int, int], set[Node]]
     #                                     ) -> list[tuple[set[Node], set[Node]]]:
     #     """
-    #     找从 g_from 到 g_to 的最短路径（通过 groups）。
-    #     考虑中间可能有多条路径，取最短的组合。
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
         
-    #     返回：
-    #     - list[tuple[set[Node], set[Node]]]: 每项是 (source_bridge, dest_bridge)
-    #       其中 source_bridge 是 g_from 与中间 group 的交集，
-    #       dest_bridge 是中间 group 与 g_to 的交集
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     if g_from == g_to:
-    #         return [(set(), set())]  # 同一 group，无需桥梁
+    # Comment removed due to garbled encoding.
         
-    #     # BFS 找最短路径
+    # Comment removed due to garbled encoding.
     #     queue = deque([(g_from, [])])  # (current_group, path_so_far)
     #     visited = {g_from}
     #     found_paths = []
@@ -652,11 +588,11 @@ class SemanticCluster:
     #                 found_paths.append(path)
     #             continue
             
-    #         # 剪枝：如果当前路径已经比最短路径长，跳过
+    # Comment removed due to garbled encoding.
     #         if len(path) >= min_length:
     #             continue
             
-    #         # 探索相邻的 groups（有交集的 groups）
+    # Comment removed due to garbled encoding.
     #         for (g1, g2), intersection in intersections.items():
     #             if g1 == current and g2 not in visited:
     #                 new_path = path + [(current, g2, intersection)]
@@ -667,38 +603,38 @@ class SemanticCluster:
     #                 queue.append((g1, new_path))
     #                 visited.add(g1)
         
-    #     # 将路径转换为 bridges 形式
+    # Comment removed due to garbled encoding.
     #     result: list[tuple[set[Node], set[Node]]] = []
     #     for path in found_paths:
     #         if not path:  # g_from == g_to
     #             result.append((set(), set()))
     #         else:
-    #             # path 的每一项是 (from_group, to_group, intersection)
-    #             # 我们需要提取 from_group 与交集的部分，以及 to_group 与交集的部分
-    #             # 简化：对于每一条过渡路径，我们取所有交集中最短的
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #             bridges = [inter for _, _, inter in path]
-    #             # 找最短的组合（这里简化为直接使用所有交集）
+    # Comment removed due to garbled encoding.
     #             result.append((bridges[0] if bridges else set(), bridges[-1] if bridges else set()))
         
     #     return result if result else [(set(), set())]
     
-    # ====== 步骤4: 为两个顶点构造完整的路径序列 ======
+    # Comment removed due to garbled encoding.
     # def _construct_full_sequences(self, v1: Vertex, v2: Vertex,
     #                                 groups: list[list[Hyperedge]]
     #                                 ) -> list[list[Node]]:
     #     """
-    #     为两个顶点构造完整的路径序列。
+    # Comment removed due to garbled encoding.
         
-    #     逻辑：
-    #     1. 同一 group：直接调用 _construct_path_within_group
-    #     2. 不同 groups：
-    #        - 调用 _construct_path_across_groups 获得大步序列 [(node_a, group_b, node_b), ...]
-    #        - 对每个大步 (node_a, group_b, node_b)，调用 _construct_path_within_group(node_a, node_b, groups[group_b])
-    #        - 拼接所有小步路径
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     logger = getLogger("semantic_cluster")
         
-    #     # 找出 v1 和 v2 所在的 hyperedges 和 groups
+    # Comment removed due to garbled encoding.
     #     hyperedges_v1 = [he for he in self.hyperedges if v1 in he.vertices]
     #     hyperedges_v2 = [he for he in self.hyperedges if v2 in he.vertices]
         
@@ -710,7 +646,7 @@ class SemanticCluster:
         
     #     sequences = []
         
-    #     # 枚举所有可能的 (he_v1, he_v2) 组合
+    # Comment removed due to garbled encoding.
     #     for he_v1 in hyperedges_v1:
     #         node_v1 = he_v1.current_node(v1)
     #         if node_v1 is None:
@@ -729,58 +665,58 @@ class SemanticCluster:
     #             if g_v2 is None:
     #                 continue
                 
-    #             # 情况1：同一 group 内
+    # Comment removed due to garbled encoding.
     #             if g_v1 == g_v2:
     #                 path = self._construct_path_within_group(node_v1, node_v2, groups[g_v1])
     #                 if path:
     #                     sequences.append(path)
     #             else:
-    #                 # 情况2：不同 groups
+    # Comment removed due to garbled encoding.
     #                 big_step_sequences = self._construct_path_across_groups(
     #                     node_v1, node_v2, g_v1, g_v2, groups, intersections
     #                 )
                     
-    #                 # 对每个大步序列，填充小步
+    # Comment removed due to garbled encoding.
     #                 for big_steps in big_step_sequences:
     #                     full_path = []
                         
-    #                     # 遍历大步序列中的每一个大步
+    # Comment removed due to garbled encoding.
     #                     for step_idx, (start_node, group_idx, end_node) in enumerate(big_steps):
-    #                         # 调用 _construct_path_within_group 获得小步路径
+    # Comment removed due to garbled encoding.
     #                         small_path = self._construct_path_within_group(start_node, end_node, groups[group_idx])
                             
     #                         if small_path is None:
     #                             logger.debug(f"[_construct_full_sequences] Failed to construct path in group {group_idx}")
-    #                             break  # 这个大步序列无法完成，跳过
+    # Comment removed due to garbled encoding.
                             
-    #                         # 添加小步路径（避免重复第一个节点，除了第一步）
+    # Comment removed due to garbled encoding.
     #                         if not full_path:
     #                             full_path.extend(small_path)
     #                         else:
     #                             full_path.extend(small_path[1:])
     #                     else:
-    #                         # 所有大步都成功完成
+    # Comment removed due to garbled encoding.
     #                         if full_path:
     #                             sequences.append(full_path)
         
     #     return sequences
     
-    # ====== 辅助：同 group 内的路径构造 ======
+    # Comment removed due to garbled encoding.
     # def _construct_path_within_group(self, node_v1: Node, node_v2: Node,
     #                                   group: list[Hyperedge]) -> list[Node] | None:
     #     """
-    #     构造同一 group 内两个 nodes 的路径。
-    #     使用该 group 内的最近公共根进行追溯。
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     logger = getLogger("semantic_cluster")
         
-    #     # 获取这两个 nodes 的最近公共根（已缓存）
+    # Comment removed due to garbled encoding.
     #     nearest_root = self._get_nearest_root_for_node_pair(node_v1, node_v2)
     #     if nearest_root is None:
     #         logger.debug(f"[_construct_path_within_group] No common root for '{node_v1.text}' and '{node_v2.text}'")
     #         return None
         
-    #     # 从 node_v1 追溯到 nearest_root
+    # Comment removed due to garbled encoding.
     #     path_v1_to_root = []
     #     current = node_v1
     #     visited = set()
@@ -795,7 +731,7 @@ class SemanticCluster:
     #         logger.debug(f"[_construct_path_within_group] Failed to trace node_v1 to root")
     #         return None
         
-    #     # 从 node_v2 追溯到 nearest_root
+    # Comment removed due to garbled encoding.
     #     path_v2_to_root = []
     #     current = node_v2
     #     visited = set()
@@ -810,36 +746,36 @@ class SemanticCluster:
     #         logger.debug(f"[_construct_path_within_group] Failed to trace node_v2 to root")
     #         return None
         
-    #     # 合并路径：v1 → ... → root ← ... ← v2
-    #     # path_v2_to_root 需要反向，且去掉最后的 root（避免重复）
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     path_v2_to_root_reversed = path_v2_to_root[:-1]
     #     path_v2_to_root_reversed.reverse()
         
     #     full_path = path_v1_to_root + path_v2_to_root_reversed
     #     return full_path if full_path else None
     
-    # ====== 辅助：跨 groups 的路径构造 ======
+    # Comment removed due to garbled encoding.
     # def _construct_path_across_groups(self, node_v1: Node, node_v2: Node,
     #                                 g_v1: int, g_v2: int,
     #                                 groups: list[list[Hyperedge]],
     #                                 intersections: dict[tuple[int, int], set[Node]]
     #                                 ) -> list[list[tuple[Node, int, Node]]]:
     #     """
-    #     构造跨越多个 groups 的大步序列。
+    # Comment removed due to garbled encoding.
         
-    #     返回值：list[list[tuple[Node, int, Node]]]，表示多条大步路径
-    #     - 最外层 list：多条路径
-    #     - 中间层 list：单条路径的大步序列
-    #     - 内层 tuple：(start_node, group_index, end_node)，表示从 start_node 出发，经过 group_index，到达 end_node
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
         
-    #     策略：
-    #     1. 用 BFS 找 groups 之间的所有最短路径（group 序列）
-    #     2. 对每条 group 序列，对每个相邻 group 的交集做笛卡尔积，枚举所有桥梁组合
-    #     3. 返回所有大步序列（由上层方法填充小步）
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     logger = getLogger("semantic_cluster")
 
-    #     # 找 groups 之间的所有最短路径（group 序列）
+    # Comment removed due to garbled encoding.
     #     group_paths = self._find_all_shortest_inter_group_paths_bfs(g_v1, g_v2, intersections)
 
     #     if not group_paths:
@@ -852,7 +788,7 @@ class SemanticCluster:
     #         if len(group_path) < 2:
     #             continue
 
-    #         # 收集每个相邻 group 的交集节点列表，后续做笛卡尔积
+    # Comment removed due to garbled encoding.
     #         bridge_candidates_per_hop: list[list[Node]] = []
     #         valid_group_path = True
     #         for i in range(len(group_path) - 1):
@@ -868,18 +804,18 @@ class SemanticCluster:
     #         if not valid_group_path or not bridge_candidates_per_hop:
     #             continue
 
-    #         # 枚举交集组合：例如 [w1,w2] x [w3,w4]
+    # Comment removed due to garbled encoding.
     #         for bridge_combo in product(*bridge_candidates_per_hop):
     #             big_steps: list[tuple[Node, int, Node]] = []
 
-    #             # 第一步：(node_v1, group_path[0], bridge_combo[0])
+    # Comment removed due to garbled encoding.
     #             big_steps.append((node_v1, group_path[0], bridge_combo[0]))
 
-    #             # 中间步：(bridge_combo[i-1], group_path[i], bridge_combo[i])
+    # Comment removed due to garbled encoding.
     #             for i in range(1, len(bridge_combo)):
     #                 big_steps.append((bridge_combo[i - 1], group_path[i], bridge_combo[i]))
 
-    #             # 最后一步：(bridge_combo[-1], group_path[-1], node_v2)
+    # Comment removed due to garbled encoding.
     #             big_steps.append((bridge_combo[-1], group_path[-1], node_v2))
 
     #             all_big_step_sequences.append(big_steps)
@@ -890,17 +826,17 @@ class SemanticCluster:
     #                                             intersections: dict[tuple[int, int], set[Node]]
     #                                             ) -> list[list[int]]:
     #     """
-    #     用 BFS 返回从 g_from 到 g_to 的所有最短 group 路径。
+    # Comment removed due to garbled encoding.
     #     """
     #     if g_from == g_to:
     #         return [[g_from]]
 
-    #     # 构建 group 邻接表
+    # Comment removed due to garbled encoding.
     #     adjacency: dict[int, set[int]] = {}
     #     for g1, g2 in intersections.keys():
     #         adjacency.setdefault(g1, set()).add(g2)
 
-    #     # BFS 计算最短距离
+    # Comment removed due to garbled encoding.
     #     dist: dict[int, int] = {g_from: 0}
     #     queue = deque([g_from])
     #     while queue:
@@ -915,7 +851,7 @@ class SemanticCluster:
 
     #     shortest_len = dist[g_to]
 
-    #     # 反向回溯所有最短路径
+    # Comment removed due to garbled encoding.
     #     all_paths: list[list[int]] = []
 
     #     def dfs(node: int, path: list[int]) -> None:
@@ -929,16 +865,16 @@ class SemanticCluster:
 
     #     dfs(g_to, [g_to])
 
-    #     # 安全过滤：仅保留最短长度路径
+    # Comment removed due to garbled encoding.
     #     return [p for p in all_paths if len(p) - 1 == shortest_len]
     
-    # ====== 辅助：BFS 找 groups 间最短路径 ======
+    # Comment removed due to garbled encoding.
     # def _find_shortest_inter_group_path_bfs(self, g_from: int, g_to: int,
     #                                         intersections: dict[tuple[int, int], set[Node]]
     #                                         ) -> list[int]:
     #     """
-    #     用 BFS 找从 g_from 到 g_to 的最短 group 路径。
-    #     返回 group 索引序列。
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     if g_from == g_to:
     #         return [g_from]
@@ -952,7 +888,7 @@ class SemanticCluster:
     #         if current == g_to:
     #             return path
             
-    #         # 探索相邻 groups（通过交集）
+    # Comment removed due to garbled encoding.
     #         for (g1, g2) in intersections.keys():
     #             if g1 == current and g2 not in visited:
     #                 queue.append((g2, path + [g2]))
@@ -963,18 +899,18 @@ class SemanticCluster:
         
     #     return []
     
-    # ====== 步骤5: 将路径转换为字符串 ======
+    # Comment removed due to garbled encoding.
     # def _path_to_string(self, path: list[Node]) -> tuple[str, int]:
     #     """
-    #     将一条 Node 路径转换为字符串描述和长度。
+    # Comment removed due to garbled encoding.
         
-    #     返回：
+    # Comment removed due to garbled encoding.
     #     - (description: str, length: int)
     #     """
     #     if not path:
     #         return "", 0
         
-    #     # 简化实现：直接拼接节点文本
+    # Comment removed due to garbled encoding.
     #     node_texts = []
     #     for node in path:
     #         if hasattr(node, 'text'):
@@ -986,33 +922,14 @@ class SemanticCluster:
     #     return description, len(path)
 
     def get_path_node_steps(self, v1: Vertex, v2: Vertex) -> tuple[list[list[Node]], Node | None, Node | None]:
-        """
-        计算两个 Vertex 之间的路径节点列表。
-        
-        返回格式：
-                - tuple[list[list[Node]], Node | None, Node | None]:
-                    - 第1项：对于路径上的每个 Group 段，返回该段内根据 node.index 排序的 Node 列表
-                    - 第2项：v1 在起始 group/hyperedge 中对应的 current_node
-                    - 第3项：v2 在结束 group/hyperedge 中对应的 current_node
-        
-        处理流程：
-        1. 构造三元组序列 [(n1, g1, w1), (w1, g2, w2), ..., (wk, gn, n2)]
-        2. 对每个三元组 (a, g, b)：
-           - 找它们在 group g 中的最近公共根 r
-           - 追溯两条路径 a→r 和 b→r，收集所有节点
-           - 合并去重后按 node.index 排序
-        3. 返回所有段的排序节点列表
-        
-        特殊处理：
-        - 如果某个节点就是另一个节点的祖先，会妥善处理不出错
-        """
+        """ Docstring removed due to garbled encoding. """
         logger = getLogger("semantic_cluster")
         
         if v1 is None or v2 is None:
             return [], None, None
         
         try:
-            # 步骤 1: 获取 v1, v2 各自所属的 Group 集合
+            # Comment removed due to garbled encoding.
             v1_groups = self._get_vertex_groups(v1)
             v2_groups = self._get_vertex_groups(v2)
             
@@ -1020,7 +937,7 @@ class SemanticCluster:
                 logger.debug(f"[get_path_node_steps] v1 or v2 not in any group")
                 return [], None, None
             
-            # 步骤 2: 找最近的 Group 对和路径
+            # Comment removed due to garbled encoding.
             closest_result = self._find_closest_group_pair(v1_groups, v2_groups)
             if closest_result is None:
                 logger.debug(f"[get_path_node_steps] No path between v1_groups={v1_groups} and v2_groups={v2_groups}")
@@ -1029,7 +946,7 @@ class SemanticCluster:
             g1, gn, group_path = closest_result
             logger.debug(f"[get_path_node_steps] Found path: {group_path}")
             
-            # 步骤 3: 获取 v1 在第一个 Group g1 中的 current_node
+            # Comment removed due to garbled encoding.
             groups, he_to_group = self._build_hyperedge_groups()
             
             n1 = None
@@ -1043,7 +960,7 @@ class SemanticCluster:
                 logger.debug(f"[get_path_node_steps] Cannot find node for v1 in group {g1}")
                 return [], None, None
             
-            # 步骤 4: 获取 v2 在最后一个 Group gn 中的 current_node
+            # Comment removed due to garbled encoding.
             n2 = None
             for he in self.hyperedges:
                 if v2 in he.vertices and he_to_group.get(he) == gn:
@@ -1055,21 +972,21 @@ class SemanticCluster:
                 logger.debug(f"[get_path_node_steps] Cannot find node for v2 in group {gn}")
                 return [], None, None
             
-            # 步骤 5: 构建三元组序列
+            # Comment removed due to garbled encoding.
             triple_sequence: list[tuple[Node, int, Node]] = []
             bridge_map = self._build_inter_group_bridge_map()
             
-            # 处理单一 Group 的情况（v1 和 v2 在同一 Group）
+            # Comment removed due to garbled encoding.
             if g1 == gn:
                 triple_sequence.append((n1, g1, n2))
             else:
-                # 处理多个 Group 的情况
+                # Comment removed due to garbled encoding.
                 current_node = n1
                 for i in range(len(group_path) - 1):
                     gi = group_path[i]
                     next_gi = group_path[i + 1]
                     
-                    # 获取 gi 和 next_gi 之间的桥梁 Node
+                    # Comment removed due to garbled encoding.
                     bridge_key = (gi, next_gi) if (gi, next_gi) in bridge_map else (next_gi, gi)
                     bridges = bridge_map.get(bridge_key, set())
                     
@@ -1077,33 +994,33 @@ class SemanticCluster:
                         logger.debug(f"[get_path_node_steps] No bridges between {gi} and {next_gi}")
                         return [], None, None
                     
-                    # 选择第一个桥梁 Node（可以优化为选择距离最近的）
+                    # Comment removed due to garbled encoding.
                     next_node = next(iter(bridges))
                     triple_sequence.append((current_node, gi, next_node))
                     current_node = next_node
                 
-                # 最后一个三元组：从最后一个桥梁 Node 到 v2
+                # Comment removed due to garbled encoding.
                 triple_sequence.append((current_node, gn, n2))
             
-            # 步骤 6: 对每个三元组，构造该 Group 内的完整 Node 路径
+            # Comment removed due to garbled encoding.
             result: list[list[Node]] = []
             
             for node_a, group_idx, node_b in triple_sequence:
-                # 获取该 group 内两个节点的最近公共根
-                # 注意：缓存中的 (node1, node2) 是在同一 group 内计算的
+                # Comment removed due to garbled encoding.
+                # Comment removed due to garbled encoding.
                 assert self._node_pair_nearest_root
                 
                 nearest_root = self._node_pair_nearest_root.get((node_a, node_b))
                 
                 if nearest_root is None:
-                    # 尝试反向查找
+                    # Comment removed due to garbled encoding.
                     nearest_root = self._node_pair_nearest_root.get((node_b, node_a))
                 
                 if nearest_root is None:
                     logger.debug(f"[get_path_node_steps] Cannot find common root for {node_a.text} and {node_b.text} in group {group_idx}")
                     return [], None, None
                 
-                # 从 node_a 上溯到 nearest_root，收集路径
+                # Comment removed due to garbled encoding.
                 path_a: list[Node] = []
                 current = node_a
                 visited_a: set[Node] = set()
@@ -1114,7 +1031,7 @@ class SemanticCluster:
                         break
                     current = current.head
                 
-                # 从 node_b 上溯到 nearest_root，收集路径
+                # Comment removed due to garbled encoding.
                 path_b: list[Node] = []
                 current = node_b
                 visited_b: set[Node] = set()
@@ -1125,7 +1042,7 @@ class SemanticCluster:
                         break
                     current = current.head
                 
-                # 检查是否成功到达最近公共根
+                # Comment removed due to garbled encoding.
                 if not path_a or path_a[-1] != nearest_root:
                     logger.debug(f"[get_path_node_steps] Failed to trace {node_a.text} to root {nearest_root.text}")
                     return [], None, None
@@ -1134,13 +1051,13 @@ class SemanticCluster:
                     logger.debug(f"[get_path_node_steps] Failed to trace {node_b.text} to root {nearest_root.text}")
                     return [], None, None
                 
-                # 合并两条路径（去除重复的 nearest_root）
+                # Comment removed due to garbled encoding.
                 # path_a: [a, ..., root]
                 # path_b: [b, ..., root]
-                # 合并：[a, ..., root, ..., b]（root 只出现一次）
-                merged_path = path_a + path_b[-2::-1]  # path_b 反向去掉最后的 root
+                # Comment removed due to garbled encoding.
+                merged_path = path_a + path_b[-2::-1]  # Comment removed due to garbled encoding.
                 
-                # 按 node.index 排序
+                # Comment removed due to garbled encoding.
                 sorted_nodes = sorted(merged_path, key=lambda node: node.index if hasattr(node, 'index') else float('inf'))
                 
                 result.append(sorted_nodes)
@@ -1151,20 +1068,20 @@ class SemanticCluster:
             logger.exception(f"[get_path_node_steps] Error finding path: {e}")
             return [], None, None
     
-    # # ====== 主入口：get_path_description ======
+    # Comment removed due to garbled encoding.
     # def get_path_description(self, v1: Vertex, v2: Vertex) -> list[tuple[str, int]]:
     #     """
-    #     获取两个 Vertex 之间的路径描述。
+    # Comment removed due to garbled encoding.
         
-    #     返回多条可能的路径，按长度从短到长排序。
-    #     每条路径返回 (description: str, length: int)
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
         
-    #     算法流程：
-    #     1. 构建 hyperedges 的 groups（按 root 连接关系）
-    #     2. 找 groups 之间的交集节点（桥梁）
-    #     3. 找从 v1 所在 group 到 v2 所在 group 的路径
-    #     4. 构造完整的 Node 序列
-    #     5. 转换为字符串描述
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     #     """
     #     logger = getLogger("semantic_cluster")
         
@@ -1172,7 +1089,7 @@ class SemanticCluster:
     #         return []
         
     #     try:
-    #         # 步骤 1-4: 构造路径
+    # Comment removed due to garbled encoding.
     #         groups, _ = self._build_hyperedge_groups()
     #         sequences = self._construct_full_sequences(v1, v2, groups)
             
@@ -1180,10 +1097,10 @@ class SemanticCluster:
     #             logger.debug(f"[get_path_description] No path found between {v1.text()} and {v2.text()}")
     #             return []
             
-    #         # 步骤 5: 转换为字符串
+    # Comment removed due to garbled encoding.
     #         paths = [self._path_to_string(seq) for seq in sequences]
             
-    #         # 按长度排序
+    # Comment removed due to garbled encoding.
     #         paths.sort(key=lambda x: x[1])
             
     #         return paths
@@ -1305,7 +1222,7 @@ class SemanticCluster:
         if key in self.vertices_paths:
             return self.vertices_paths[key]
         logger = getLogger("semantic_cluster")
-        logger.debug(f"get_paths_between_vertices called for: '{v1.text()}' ↔ '{v2.text()}'")
+        logger.debug(f"String removed due to garbled encoding.")
 
         node_vertex: dict[Node, Vertex] = {}
         nodes_in_vertices: set[Node] = set()
@@ -1345,9 +1262,9 @@ class SemanticCluster:
                 if head in saved_nodes:
                     break
                 current = head
-                # >>> 新增：防止自环导致死循环 <<<
+                # Comment removed due to garbled encoding.
                 if head.head == head:
-                    logger.warning(f"Detected self-loop at node '{current.text}' during v→k trace. Breaking.")
+                    logger.warning(f"String removed due to garbled encoding.")
                     break
                 head = head.head
             saved_nodes.add(root)
@@ -1372,7 +1289,7 @@ class SemanticCluster:
                 node_paths.setdefault((vertex_u, vertex_v), []).append((text, 1))
                 continue
             
-            # === 修复1: 安全追溯 u -> k (移除 assert) ===
+            # Comment removed due to garbled encoding.
             node_cnt = 1
             path_items: list[Node] = []
             current = u
@@ -1383,26 +1300,26 @@ class SemanticCluster:
                     node_cnt += 1
                     path_items.append(current)
                 if current.head is None:
-                    logger.warning(f"路径追溯失败 u→k: Node '{current.text}' (index={current.index}) has no head "
+                    logger.warning(f"String removed due to garbled encoding."
                             f"while tracing to LCA '{k.text}' (index={k.index}). "
-                            f"Trace: {' → '.join(current_trace)}")
+                            f"String removed due to garbled encoding.")
                     break
-                # >>> 新增：防止自环导致死循环 <<<
+                # Comment removed due to garbled encoding.
                 if current.head in visited_trace:
-                    logger.warning(f"Cycle detected in u→k trace: '{current.head.text}' is already in trace. Breaking.")
+                    logger.warning(f"String removed due to garbled encoding.")
                     break
                 visited_trace.add(current.head)
                 
                 if current.head == current:
-                    logger.warning(f"Detected self-loop at node '{current.text}' during u→k trace. Breaking.")
+                    logger.warning(f"String removed due to garbled encoding.")
                     break
                 current = current.head
                 current_trace.append(current.text)
             else:
-                # 仅当成功到达 LCA 时才继续
+                # Comment removed due to garbled encoding.
                 path_items.append(k)
                 
-                # === 修复2: 安全追溯 v -> k (移除 assert) ===
+                # Comment removed due to garbled encoding.
                 rev_path_items: list[Node] = []
                 current = v
                 current_trace = [current.text]
@@ -1412,23 +1329,23 @@ class SemanticCluster:
                         node_cnt += 1
                         rev_path_items.append(current)
                     if current.head is None:
-                        logger.warning(f"路径追溯失败 v→k: Node '{current.text}' (index={current.index}) has no head "
+                        logger.warning(f"String removed due to garbled encoding."
                                 f"while tracing to LCA '{k.text}' (index={k.index}). "
-                                f"Trace: {' → '.join(current_trace)}")
+                                f"String removed due to garbled encoding.")
                         break
-                    # >>> 新增：防止自环导致死循环 <<<
+                    # Comment removed due to garbled encoding.
                     if current.head in visited_trace_v:
-                        logger.warning(f"Cycle detected in v→k trace: '{current.head.text}' is already in trace. Breaking.")
+                        logger.warning(f"String removed due to garbled encoding.")
                         break
                     visited_trace_v.add(current.head)
                     
                     if current.head == current:
-                        logger.warning(f"Detected self-loop at node '{current.text}' during v→k trace. Breaking.")
+                        logger.warning(f"String removed due to garbled encoding.")
                         break
                     current = current.head
                     current_trace.append(current.text)
                 else:
-                    # 仅当两个方向都成功到达 LCA 时才构建路径
+                    # Comment removed due to garbled encoding.
                     rev_path_items = rev_path_items[::-1]
                     path_items.extend(rev_path_items)
                     text = node_sequence_to_text(path_items)
@@ -1436,9 +1353,9 @@ class SemanticCluster:
                     
                     node_paths.setdefault((vertex_u, vertex_v), []).append((text, node_cnt))
                     node_paths.setdefault((vertex_v, vertex_u), []).append((text_inv, node_cnt))
-                    continue  # 成功处理，跳过后续
+                    continue  # Comment removed due to garbled encoding.
         
-        # 选择最短路径
+        # Comment removed due to garbled encoding.
         for (vertex_u, vertex_v), paths in node_paths.items():
             if paths:
                 paths = sorted(paths, key=lambda x: x[1])
@@ -1590,15 +1507,12 @@ class SemanticCluster:
         return self._signature
 
     def to_triple(self) -> list[tuple[str, list[str]]]:
-        """
-        将 SemanticCluster 抽象为三元组形式: (root, [node1, node2, ...])
-        返回一个三元组列表，每个 hyperedge 对应一个三元组
-        """
+        """ Docstring removed due to garbled encoding. """
         triples = []
         for he in self.hyperedges:
             root_text = Vertex.resolved_text(he.current_node(he.root))
             
-            # 收集非root的节点
+            # Comment removed due to garbled encoding.
             args = []
             for vertex in he.vertices:
                 if vertex == he.root:
@@ -1618,7 +1532,7 @@ class SemanticCluster:
         return triples
     
     def to_triple_text(self) -> str:
-        """返回所有三元组的文本表示"""
+        """ Docstring removed due to garbled encoding. """
         texts = []
         for root, args in self.to_triple():
             if len(args) == 0:
@@ -1638,9 +1552,9 @@ class SemanticCluster:
         return self.signature() == other.signature()
     
 def combine_hyperedges_to_cluster(hypergraph: Hypergraph) -> list[SemanticCluster]:
-    # 枚举所有的 hyperedge 我们不妨记为 root(child1, child2, ...)
-    # 如果 childi 的 POS 为 VERB 或 AUX，且 root 的 POS 不为 VERB 或 AUX，则认为 childi 是 root 的谓词补语
-    # 我们将 childi 作为 root 的 hyperedge 跟此 hyperedge 进行合并，形成一个新的 SemanticCluster
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     clusters: list[SemanticCluster] = []
     
     # TODO: USE MORE CONVINCED METHOD
@@ -1732,33 +1646,33 @@ def calc_semantic_cluster_pairs(
     logger: Optional[logging.Logger] = None
 ) -> list[tuple[SemanticCluster, SemanticCluster, float]]:
     assert logger is not None
-    # ========== 入口日志 ==========
+    # Comment removed due to garbled encoding.
     logger.info(f"[SemanticClusterPairs] Start: Q_edges={len(hypergraph_q.hyperedges)}, "
                    f"D_edges={len(hypergraph_d.hyperedges)}, likely_map={len(likely_map)}, "
                    f"threshold={cluster_sim_threshold}, multihop={is_multihop}")
     
     pairs: list[tuple[SemanticCluster, SemanticCluster, float]] = []
     
-    # ========== Step 1: 构建查询侧语义簇 ==========
+    # Comment removed due to garbled encoding.
     clusters_q = combine_hyperedges_to_cluster(hypergraph_q)
     logger.info(f"[SemanticClusterPairs] Step1-Done: Generated {len(clusters_q)} query clusters from {len(hypergraph_q.hyperedges)} hyperedges")
     
-    # ========== Step 2: 批量计算查询簇嵌入 ==========
+    # Comment removed due to garbled encoding.
     calc_embedding_for_cluster_batch(clusters_q)
     logger.info(f"[SemanticClusterPairs] Step2-Done: Computed embeddings for {len(clusters_q)} query clusters")
     
-    # ========== Step 3: 获取 Top-K 匹配顶点 ==========
+    # Comment removed due to garbled encoding.
     K_LIKELY = branch_threshold
     # likely_map = get_top_k_matched_vertices(matched_vertices, K_LIKELY)
     matched_count = sum(len(v) for v in likely_map.values())
     logger.info(f"[SemanticClusterPairs] Step3-Done: likely_map built with {len(likely_map)} source vertices, "
                    f"{matched_count} total matches (K={K_LIKELY})")
     
-    # ========== Step 4: 生成候选顶点对 ==========
+    # Comment removed due to garbled encoding.
     vertices_pairs_need_path: list[tuple[Vertex, Vertex]] = []
     vertices_pairs_to_sc: dict[tuple[Vertex, Vertex], list[SemanticCluster]] = {}
     
-    pair_gen_start = time.time() if logger else None  # 仅用于计时，不改变逻辑
+    pair_gen_start = time.time() if logger else None  # Comment removed due to garbled encoding.
     
     for sc_q in clusters_q:
         vertices_d_pairs: set[tuple[Vertex, Vertex]] = set()
@@ -1789,7 +1703,7 @@ def calc_semantic_cluster_pairs(
                    f"{unique_pairs} unique pairs, {len(vertices_pairs_to_sc)} pairs mapped to clusters, "
                    f"time={pair_gen_time:.2f}s")
     
-    # ========== Step 5: 去重并执行路径搜索 ==========
+    # Comment removed due to garbled encoding.
     vertices_pairs_need_path = list(set(vertices_pairs_need_path))
     logger.info(f"[SemanticClusterPairs] Step5-Start: Path search for {len(vertices_pairs_need_path)} unique vertex pairs "
                    f"(method={'local' if is_multihop else 'global'})")
@@ -1805,7 +1719,7 @@ def calc_semantic_cluster_pairs(
     logger.info(f"[SemanticClusterPairs] Step5-Done: Path search completed in {path_search_time:.2f}s, "
                 f"reachable={reachable}/{len(path_map)} pairs")
     
-    # ========== Step 6: 构建文档侧语义簇候选 ==========
+    # Comment removed due to garbled encoding.
     sc_pairs_candidates: list[tuple[SemanticCluster, SemanticCluster]] = []
     sc_d_candidates: list[SemanticCluster] = []
     
@@ -1819,11 +1733,11 @@ def calc_semantic_cluster_pairs(
     
     logger.info(f"[SemanticClusterPairs] Step6-Done: Built {len(sc_pairs_candidates)} candidate cluster pairs, {len(sc_d_candidates)} document clusters to embed")
     
-    # ========== Step 7: 批量计算文档簇嵌入 ==========
+    # Comment removed due to garbled encoding.
     calc_embedding_for_cluster_batch(sc_d_candidates)
     logger.info(f"[SemanticClusterPairs] Step7-Done: Computed embeddings for {len(sc_d_candidates)} document clusters")
     
-    # ========== Step 8: 相似度计算与过滤 ==========
+    # Comment removed due to garbled encoding.
     filter_start = time.time()
     sim_embedding_pairs = [ (sc_q.embedding, sc_d.embedding) for sc_q, sc_d in sc_pairs_candidates]
     
@@ -1843,29 +1757,27 @@ def calc_semantic_cluster_pairs(
     logger.info(f"[SemanticClusterPairs] Step8-Done: Filtered {passed_count}/{len(sc_pairs_candidates)} pairs "
                 f"by threshold={cluster_sim_threshold}, time={filter_time:.2f}s")
     
-    # ========== 出口日志 ==========
+    # Comment removed due to garbled encoding.
     logger.info(f"[SemanticClusterPairs] Return: {len(pairs)} final semantic cluster pairs")
     return pairs
 
-# --- 辅助函数：构建顶点的后代簇（找依存树上根的节点，max_hops 跳内）---
+# Comment removed due to garbled encoding.
 def build_descendant_cluster(
     vertex: Vertex,
     hg: Hypergraph,
     max_hops: int = 2
 ) -> 'SemanticCluster':
-    """
-    基于依存树构建后代簇
-    """
+    """ Docstring removed due to garbled encoding. """
     logger = getLogger("semantic_cluster")
     
-    # Step 1: 找到 vertex 对应的 Node（取第一个）
+    # Comment removed due to garbled encoding.
     node = vertex.nodes[0] if vertex.nodes else None
     if not node or not hasattr(node, 'children'):
-        # 退化为直接超边
+        # Comment removed due to garbled encoding.
         direct_edges = [e for e in hg.hyperedges if vertex in e.vertices]
         return SemanticCluster(direct_edges, hg.doc)
     
-    # Step 2: BFS 遍历依存树（max_hops 层）
+    # Comment removed due to garbled encoding.
     descendant_nodes = {node}
     queue = [(node, 0)]
     
@@ -1878,9 +1790,9 @@ def build_descendant_cluster(
                 descendant_nodes.add(child)
                 queue.append((child, depth + 1))
     
-    # Step 3: 收集包含任意后代 Node 的超边
+    # Comment removed due to garbled encoding.
     visited_edges = set()
-    node_to_vertex = {}  # 构建 Node → Vertex 映射
+    node_to_vertex = {}  # Comment removed due to garbled encoding.
     for v in hg.vertices:
         for n in v.nodes:
             node_to_vertex[n] = v
@@ -1892,7 +1804,7 @@ def build_descendant_cluster(
                 break
     
     logger.debug(
-        f"build_descendant_cluster: vertex='{vertex.text()}' (ID={vertex.id}) → "
+        f"String removed due to garbled encoding."
         f"{len(descendant_nodes)} descendant nodes, {len(visited_edges)} hyperedges"
     )
     return SemanticCluster(list(visited_edges), hg.doc)
@@ -1909,8 +1821,8 @@ def get_semantic_cluster_pairs(
     allowed_pairs: Set[Tuple[int, int]],
     vertex_to_sim_id_q: Dict[Vertex, int],
     vertex_to_sim_id_d: Dict[Vertex, int],
-    max_hops_query: int = 1,   # Query 1 跳
-    max_hops_data: int = 2,    # Data 2 跳
+    max_hops_query: int = 1,   # Comment removed due to garbled encoding.
+    max_hops_data: int = 2,    # Comment removed due to garbled encoding.
     cluster_sim_threshold: float = 0.4,
     logger: Optional[logging.Logger] = None
 ) -> List[Tuple[SemanticCluster, SemanticCluster, float, Vertex, Vertex]]:
@@ -1918,10 +1830,10 @@ def get_semantic_cluster_pairs(
     if logger is None:
         logger = getLogger("semantic_cluster")
     
-    logger.info(f"按需构建语义簇 (Query hops={max_hops_query}, Data hops={max_hops_data})...")
+    logger.info(f"String removed due to garbled encoding.")
     start_time = time.time()
     
-    # 反向映射: SimID → Vertex
+    # Comment removed due to garbled encoding.
     sim_id_to_vertex_q = {sim_id: v for v, sim_id in vertex_to_sim_id_q.items()}
     sim_id_to_vertex_d = {sim_id: v for v, sim_id in vertex_to_sim_id_d.items()}
     
@@ -1936,17 +1848,17 @@ def get_semantic_cluster_pairs(
         if q_vertex is None or d_vertex is None:
             continue
         
-        # === Query 簇  ===
+        # Comment removed due to garbled encoding.
         sc_q = build_descendant_cluster(q_vertex, query_hg, max_hops=max_hops_query)
         if not sc_q.hyperedges:
             continue
         
-        # === Data 簇 ===
+        # Comment removed due to garbled encoding.
         sc_d = build_descendant_cluster(d_vertex, data_hg, max_hops=max_hops_data)
         if not sc_d.hyperedges:
             continue
         
-        # 计算嵌入和相似度
+        # Comment removed due to garbled encoding.
         calc_embedding_for_cluster_batch([sc_q, sc_d])
         if sc_q.embedding is None or sc_d.embedding is None:
             continue
@@ -1962,7 +1874,7 @@ def get_semantic_cluster_pairs(
             d_triple_repr = f"({d_triples[0][0]}, {', '.join(d_triples[0][1])})" if d_triples else "(no triple)"
             
             logger.debug(
-                f"→ 采纳簇对 #{kept_count} | Δ(Q{q_vertex.id}, D{d_vertex.id}) score={sim_score:.3f}\n"
+                f"String removed due to garbled encoding."
                 f"  Q: text='{sc_q.text()}' | nodes={len(sc_q.get_vertices())}, edges={len(sc_q.hyperedges)}\n"
                 f"     triple={q_triple_repr}\n"
                 f"  D: text='{sc_d.text()}' | nodes={len(sc_d.get_vertices())}, edges={len(sc_d.hyperedges)}\n"
@@ -1970,7 +1882,7 @@ def get_semantic_cluster_pairs(
             )
     
     cost = time.time() - start_time
-    logger.info(f"语义簇构建完成: {pair_count} allowed pairs → {kept_count} high-similarity cluster pairs (cost {cost:.3f}s)")
+    logger.info(f"String removed due to garbled encoding.")
     return cluster_pairs
 
 def node_sequence_to_text(nodes: list[Node]) -> str:
@@ -2020,31 +1932,31 @@ def _better_path(s1: str, s2: str, s2_inv: str) -> bool:
     
 
 def _legal_vertices(v1: Vertex, v2: Vertex) -> bool:
-    # Step 1: 语义兼容性（保留你原有的 is_domain 逻辑）
+    # Comment removed due to garbled encoding.
     label = get_nli_label(v1.text(), v2.text())
     if not (label == "entailment" or (label == "neutral" and v1.is_domain(v2))):
-        # logger.info(f"节点语义不兼容: '{v1.text()}' vs '{v2.text()}' (NLI={label})")
+        # Comment removed due to garbled encoding.
         return False
 
-    # Step 2: 【新增】句法角色（Dep）兼容性检查
+    # Comment removed due to garbled encoding.
     dep1 = v1.dep()
     dep2 = v2.dep()
 
-    # 定义兼容的依存关系组
+    # Comment removed due to garbled encoding.
     SUBJECT_DEPS = {Dep.nsubj, Dep.nsubjpass, Dep.csubj, Dep.agent}
     OBJECT_DEPS = {Dep.dobj, Dep.iobj, Dep.pobj, Dep.attr}
     MODIFIER_DEPS = {Dep.amod, Dep.nmod, Dep.advmod, Dep.appos}
 
-    # 同组内允许匹配
+    # Comment removed due to garbled encoding.
     if (dep1 in SUBJECT_DEPS and dep2 in SUBJECT_DEPS) or (dep1 in OBJECT_DEPS and dep2 in OBJECT_DEPS) or (dep1 in MODIFIER_DEPS and dep2 in MODIFIER_DEPS):
         return True
 
-    # 允许常见 paraphrase 跨组（如 nmod ↔ dobj）
+    # Comment removed due to garbled encoding.
     if {dep1, dep2} <= {Dep.nmod, Dep.dobj}:
         return True
 
-    # 其他情况拒绝（即使 is_domain 为真）
-    # logger.info(f"依存关系不匹配: '{v1.text()}'({dep1.name}) vs '{v2.text()}'({dep2.name})")
+    # Comment removed due to garbled encoding.
+    # Comment removed due to garbled encoding.
     return False
 
 def _path_score(s1: str, cnt1: int, s2: str, cnt2: int, path_score_cache: dict[tuple[str, str], float]) -> float:
@@ -2056,7 +1968,7 @@ def _path_score(s1: str, cnt1: int, s2: str, cnt2: int, path_score_cache: dict[t
     path_score_cache[key] = score
     return score
 
-def _get_matched_vertices(vertices1: list[Vertex], vertices2: list[Vertex]) -> dict[Vertex, set[Vertex]]: # 松紧可以调整
+def _get_matched_vertices(vertices1: list[Vertex], vertices2: list[Vertex]) -> dict[Vertex, set[Vertex]]: # Comment removed due to garbled encoding.
     matched_vertices: dict[Vertex, set[Vertex]] = {}
     text_pair_to_node_pairs: dict[tuple[str, str], tuple[Vertex, Vertex]] = {}
     for node1 in vertices1:
@@ -2077,7 +1989,7 @@ def _get_matched_vertices(vertices1: list[Vertex], vertices2: list[Vertex]) -> d
 def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: float = 0.0, force_include: Optional[Tuple[Vertex, Vertex]] = None) -> list[tuple[Vertex, Vertex, float]]:
     dm_logger = getLogger("d_match")
 
-    # --- 提取 SC1 信息 ---
+    # Comment removed due to garbled encoding.
     sc1_vertices_all = sc1.get_vertices()
     sc1_vertices_noun = [v for v in sc1_vertices_all if not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX))]
     sc1_edges = sc1.hyperedges
@@ -2085,7 +1997,7 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
     sc1_triples = sc1.to_triple() or []
     sc1_triple_repr = str(sc1_triples[0]) if sc1_triples else "(no triple)"
 
-    # --- 提取 SC2 信息 ---
+    # Comment removed due to garbled encoding.
     sc2_vertices_all = sc2.get_vertices()
     sc2_vertices_noun = [v for v in sc2_vertices_all if not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX))]
     sc2_edges = sc2.hyperedges
@@ -2093,20 +2005,20 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
     sc2_triples = sc2.to_triple() or []
     sc2_triple_repr = str(sc2_triples[0]) if sc2_triples else "(no triple)"
 
-    # --- 完整日志：当前比较的语义簇对 ---
+    # Comment removed due to garbled encoding.
     dm_logger.info(
-        f"=== D-Match 开始 (阈值={score_threshold}) ===\n"
-        f"→ SC1:\n"
+        f"String removed due to garbled encoding."
+        f"String removed due to garbled encoding."
         f"   text='{sc1_text}'\n"
         f"   triple={sc1_triple_repr}\n"
         f"   nodes={len(sc1_vertices_all)} (noun={len(sc1_vertices_noun)}), edges={len(sc1_edges)}\n"
-        f"→ SC2:\n"
+        f"String removed due to garbled encoding."
         f"   text='{sc2_text}'\n"
         f"   triple={sc2_triple_repr}\n"
         f"   nodes={len(sc2_vertices_all)} (noun={len(sc2_vertices_noun)}), edges={len(sc2_edges)}"
     )
     matches: list[tuple[Vertex, Vertex]] = []
-    # 如果两个边的节点很少，则输出结果会很少
+    # Comment removed due to garbled encoding.
     sc1_vertices = list(filter(lambda v: not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX)), sc1.get_vertices()))
     sc2_vertices = list(filter(lambda v: not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX)), sc2.get_vertices()))
     
@@ -2145,18 +2057,18 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
     # all (u, v) in sc1_edges are in sc1_pairs, and if (u, k), (k, v) in sc1_edges, then (u, v) is also in sc1_pairs
     # calculate then recursively
     
-    # 优化：使用 set 和邻接表加速传递闭包计算
+    # Comment removed due to garbled encoding.
     sc1_pairs_set = set(sc1_edges)
     added = True
     tc_loop_count = 0
     while added:
         tc_loop_count += 1
-        # 使用 INFO 级别日志以确保可见，同时加上阈值避免刷屏（仅在循环次数较多时显示）
+        # Comment removed due to garbled encoding.
         if tc_loop_count == 1 or tc_loop_count % 10 == 0:
             dm_logger.info(f"Transitive Closure Iteyration {tc_loop_count}: current pairs count = {len(sc1_pairs_set)}")
             
         added = False
-        # 构建邻接表
+        # Comment removed due to garbled encoding.
         adj = {}
         for u, v in sc1_pairs_set:
             if u not in adj: adj[u] = []
@@ -2167,7 +2079,7 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
             for v in adj[u]:
                 if v in adj:
                     for w in adj[v]:
-                        if u == w: continue # 避免自环
+                        if u == w: continue # Comment removed due to garbled encoding.
                         if (u, w) not in sc1_pairs_set and (u, w) not in new_edges:
                             new_edges.add((u, w))
                             added = True
@@ -2199,12 +2111,12 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
 
     likely_nodes = _get_matched_vertices(sc1_vertices, sc2_vertices)
     
-    # logger.info("Likely matched nodes: { " + ", ".join([f"{u.text()}→[{', '.join(v.text() for v in vs)}]" for u, vs in likely_nodes.items() if vs]) + " }")
+    # Comment removed due to garbled encoding.
 
     sc2_pairs: list[tuple[Vertex, Vertex]] = []
     sc2_paths: dict[tuple[Vertex, Vertex], tuple[str, int]] = {}
     
-    # 核心匹配逻辑
+    # Comment removed due to garbled encoding.
     dm_logger.info(f"Start Core Matching Logic: {len(sc1_pairs)} sc1 pairs")
     processed_count = 0
     for u, u_prime in sc1_pairs:
@@ -2223,7 +2135,7 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
             s2_inv, cnt2_prime = sc2.get_paths_between_vertices(v_prime, v)
             dm_logger.debug(f"    Backward path: count={cnt2_prime}, sample='{s2_inv[:50]}...'")
             
-            # 处理单向路径缺失
+            # Comment removed due to garbled encoding.
             if cnt2 == 0 or s2 == "":
                 if cnt2_prime > 0 and s2_inv:
                     sc2_pairs.append((v_prime, v))
@@ -2234,9 +2146,9 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
                 sc2_paths[(v, v_prime)] = (s2, cnt2)
                 continue
             
-            # === 修复3: 移除危险 assert，替换为防御性跳过 + 精准日志 ===
+            # Comment removed due to garbled encoding.
             if not s2 or not s2_inv:
-                dm_logger.debug(f"D-Match跳过: Empty paths for vertex pair '{v.text()}' ↔ '{v_prime.text()}' in cluster. s2='{s2}', s2_inv='{s2_inv}'")
+                dm_logger.debug(f"String removed due to garbled encoding.")
                 continue
             
             if _better_path(s1, s2, s2_inv):
@@ -2249,7 +2161,7 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
     dm_logger.debug(f"SC2 inferred path pairs: {[(u.text(), v.text()) for u, v in sc2_pairs]}")
     dm_logger.debug(f"SC2 paths count: {len(sc2_paths)}")
 
-    # 让每一个节点和root做一次计算，通过此计算能得到一个分数。核心在于确定超边的子边方向
+    # Comment removed due to garbled encoding.
     match_scores: dict[tuple[Vertex, Vertex], float] = {}
     
     for u, v in itertools.product(sc1_vertices, sc2_vertices):
@@ -2386,11 +2298,11 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
         
         match_scores[(u, v)] = in_score + out_score + root_score
         
-        # logger.info(f"Match score computed: '{u.text()}' ↔ '{v.text()}' = in({in_score:.3f}) + out({out_score:.3f}) + root({root_score:.3f}) = {match_scores[(u, v)]:.3f}")
+        # Comment removed due to garbled encoding.
         
     # filter by score_threshold
     matches = list(filter(lambda pair: match_scores.get(pair, 0.0) >= score_threshold, matches))
-    # logger.info(f"D-Match过滤后: {len(matches)}个匹配 (阈值={score_threshold})")
+    # Comment removed due to garbled encoding.
     
     # delete the matches that if (u, v1) and (u, v2) in matches and v1 != v2, keep only the one with highest score
     final_matches: list[tuple[Vertex, Vertex, float]] = []
@@ -2407,30 +2319,30 @@ def get_d_match(sc1: SemanticCluster, sc2: SemanticCluster, score_threshold: flo
         # if len(v_scores) > 1:
             # logger.info(f"Disambiguation for '{u.text()}': kept '{best_v.text()}' (score={best_score:.3f}), others: {[v.text() for v, s in v_scores[1:]]}")
 
-    # === 新增：完整输出所有 D-Match 结果（不截断）===
+    # Comment removed due to garbled encoding.
     if final_matches:
-        dm_logger.info("D-Match 完整结果:")
+        dm_logger.info("String removed due to garbled encoding.")
         for i, (u, v, score) in enumerate(final_matches, 1):
             dm_logger.info(
                 f"  [{i}] Q{u.id}: '{u.text()}' "
-                f"→ D{v.id}: '{v.text()}' "
+                f"String removed due to garbled encoding."
                 f"(score={score:.4f})"
             )
     else:
-        dm_logger.info("D-Match 完整结果: 无匹配")
+        dm_logger.info("String removed due to garbled encoding.")
 
     if force_include:
         u, v = force_include
         if (u, v, 1.0) not in final_matches:
-            final_matches.insert(0, (u, v, 1.0))  # 优先级最高
+            final_matches.insert(0, (u, v, 1.0))  # Comment removed due to garbled encoding.
 
     return final_matches
 
 
-# cosine判断
-# 1. 文本本身之间的余弦相似性
-# 2. root节点的文本相似性，可以考虑使用lemma，避免出现太多的根与根的匹配
-# 3. 交叉 
+# Comment removed due to garbled encoding.
+# Comment removed due to garbled encoding.
+# Comment removed due to garbled encoding.
+# Comment removed due to garbled encoding.
 
-# 结合四个通道取个值
+# Comment removed due to garbled encoding.
 

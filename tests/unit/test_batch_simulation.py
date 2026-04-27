@@ -1,4 +1,4 @@
-﻿"""
+"""
 浠?pkl 鏂囦欢鍔犺浇瓒呭浘骞惰繍琛?simulation
 鍦?sc 鐜涓繍琛?
 """
@@ -12,7 +12,7 @@ os.environ.setdefault("RUST_LOG", "error")
 os.environ.setdefault("GRAPH_SIM_LOG", "error")
 os.environ.setdefault("GRAPH_SIM_LOG_LEVEL", "error")
 
-from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex
+from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex as LocalVertex
 from hyper_simulation.component.nli import get_nli_labels_batch
 from simulation import Hypergraph as SimHypergraph, Hyperedge as SimHyperedge, Node as SimNode, Delta, DMatch
 

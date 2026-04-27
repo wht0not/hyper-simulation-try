@@ -1,4 +1,4 @@
-﻿"""
+"""
 鎵归噺灏嗘枃鏈浆鎹负瓒呭浘骞朵繚瀛樹负 pkl 鏂囦欢
 鍦?spacy-1 鐜涓繍琛?
 """
@@ -14,7 +14,7 @@ from fastcoref import spacy_component
 
 from combine import combine, calc_correfs_str
 from dependency import Dependency, Node, LocalDoc
-from hyper_simulation.hypergraph import Hypergraph as LocalHypergraph
+from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph
 
 ROOT = Path(__file__).resolve().parents[0]
 if str(ROOT) not in sys.path:

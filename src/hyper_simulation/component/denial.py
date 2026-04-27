@@ -59,25 +59,25 @@ def _hard_type_match_only(u: Vertex, v: Vertex) -> Tuple[bool, str]:
     if u.is_query() and query_type:
         v_type = v.type()
         if query_type == QueryType.PERSON and v_type == ENT.PERSON:
-            return True, "QueryType=PERSON → matched Data entity type: PERSON"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.TIME and v_type == ENT.TEMPORAL:
-            return True, "QueryType=TIME → matched Data entity type: TEMPORAL"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.LOCATION and v_type in {ENT.GPE, ENT.LOC, ENT.FAC, ENT.ORG, ENT.COUNTRY}:
-            return True, "QueryType=LOCATION → matched Data entity type: GPE/LOC/FAC/ORG/COUNTRY"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.NUMBER and v_type == ENT.NUMBER:
-            return True, "QueryType=NUMBER → matched Data entity type: NUMBER"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.BELONGS and v_type in {ENT.PERSON, ENT.ORG, ENT.GPE, ENT.COUNTRY, ENT.GROUP}:
-            return True, "QueryType=BELONGS → matched Data entity type: PERSON/ORG/GPE/COUNTRY/GROUP"
+            return True, "String removed due to garbled encoding."
         if query_type in {QueryType.WHAT, QueryType.WHICH} and (
             (v_type is not None and v_type != ENT.NOT_ENT) or v.pos_range(Pos.NOUN) or v.pos_range(Pos.PROPN)
         ):
-            return True, "QueryType=WHAT/WHICH → matched Data entity type: NON_EMPTY_TYPE_OR_NOUN"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.ATTRIBUTE and (v.pos_range(Pos.ADJ) or v.pos_range(Pos.ADV)):
-            return True, "QueryType=ATTRIBUTE → matched Data entity type: ADJ/ADV"
+            return True, "String removed due to garbled encoding."
         if query_type == QueryType.REASON and not v.pos_equal(Pos.PUNCT):
-            return True, "QueryType=REASON → matched Data entity type: NON_PUNCT"
+            return True, "String removed due to garbled encoding."
 
-        return False, f"QueryType={query_type} → Data type={v_type} does not match hard rules"
+        return False, f"String removed due to garbled encoding."
 
     u_group = _strict_type_group(u)
     v_group = _strict_type_group(v)
@@ -131,9 +131,7 @@ def compute_allowed_pairs(
     query_vertices: Dict[int, Vertex],
     data_vertices: Dict[int, Vertex]
 ) -> Set[Tuple[int, int]]:
-    """
-    批量计算 allowed pairs，并输出详细日志（含未匹配的 Q/D 文本）
-    """
+    """ Docstring removed due to garbled encoding. """
     logger = getLogger("denial_comment")
     
     if not query_vertices or not data_vertices:
@@ -158,7 +156,7 @@ def compute_allowed_pairs(
             else:
                 contradicted_logs.append(log_entry)
 
-    # === 全量日志输出（无截断）===
+    # Comment removed due to garbled encoding.
     if logger is not None:
         total = len(query_vertices) * len(data_vertices)
         logger.info(f"Total Q-D pairs processed: {total}")
@@ -187,15 +185,7 @@ def compute_allowed_pairs_batch(
     query_vertices: Dict[int, Vertex],
     data_vertices: Dict[int, Vertex]
 ) -> Set[Tuple[int, int]]:
-    """
-    批量计算 allowed pairs，使用 get_nli_labels_batch 提升吞吐效率
-    
-    步骤：
-    1. 构建所有 Q-D 顶点对和对应的文本对
-    2. 批量调用 get_nli_labels_batch 获取所有 NLI 标签
-    3. 使用 denial_comment_by_label 替代逐个调用 denial_comment
-    4. 输出详细日志
-    """
+    """ Docstring removed due to garbled encoding. """
     logger = getLogger("denial_comment")
     
     if not query_vertices or not data_vertices:
@@ -203,7 +193,7 @@ def compute_allowed_pairs_batch(
             logger.info("Empty query or data vertices. Returning empty allowed set.")
         return set()
 
-    # 步骤1：构建所有顶点对和文本对
+    # Comment removed due to garbled encoding.
     pairs_metadata: List[Tuple[int, Vertex, int, Vertex]] = []  # (q_id, q_vertex, d_id, d_vertex)
     text_pairs: List[Tuple[str, str]] = []
 
@@ -212,21 +202,21 @@ def compute_allowed_pairs_batch(
             pairs_metadata.append((q_id, q_vertex, d_id, d_vertex))
             text_pairs.append((d_vertex.text(), q_vertex.text()))
 
-    # 步骤2：批量获取所有 NLI 标签
+    # Comment removed due to garbled encoding.
     nli_labels = get_nli_labels_batch(text_pairs)
 
-    # 步骤3：使用标签批量处理每一对
+    # Comment removed due to garbled encoding.
     allowed: Set[Tuple[int, int]] = set()
     allowed_logs: List[str] = []
     contradicted_logs: List[str] = []
 
     for (q_id, q_vertex, d_id, d_vertex), nli_label in zip(pairs_metadata, nli_labels):
         # is_allowed, reason = denial_comment_by_label(q_vertex, d_vertex, nli_label)
-        is_allowed, reason = denial_comment_by_label_hard(q_vertex, d_vertex, nli_label)  # 仍然调用原函数以保留 QueryType 和实体类型的判断逻辑
+        is_allowed, reason = denial_comment_by_label_hard(q_vertex, d_vertex, nli_label)  # Comment removed due to garbled encoding.
         qt = q_vertex.text()
         dt = d_vertex.text()
         # if is_allowed:
-        #     print(f"✅ ALLOWED: {q_vertex.text()} <-> {d_vertex.text()}")
+        # Comment removed due to garbled encoding.
         
         log_entry = f"Q{q_id}: '{qt}' vs D{d_id}: '{dt}' (reason: {reason})"
         if is_allowed:
@@ -235,7 +225,7 @@ def compute_allowed_pairs_batch(
         else:
             contradicted_logs.append(log_entry)
 
-    # 步骤4：全量日志输出（无截断）
+    # Comment removed due to garbled encoding.
     if logger is not None:
         total = len(pairs_metadata)
         logger.info(f"Total Q-D pairs processed: {total}")
@@ -261,17 +251,15 @@ def compute_allowed_pairs_batch(
     return allowed
 
 def denial_comment(u: Vertex, v: Vertex) -> Tuple[bool, str]:
-    """
-    返回 (是否非冲突, 原因说明)
-    """
+    """ Docstring removed due to garbled encoding. """
     ut = u.text().strip()
     vt = v.text().strip()
     
-    # 1. 空文本检查
+    # Comment removed due to garbled encoding.
     if not ut or not vt:
         return False, "Empty text"
     
-    # 2. 基于 QueryType 的疑问词处理
+    # Comment removed due to garbled encoding.
     if getattr(u, 'is_query', False):
         query_types = {n.query_type for n in u.nodes if hasattr(n, 'query_type') and n.query_type}
         if query_types:
@@ -296,15 +284,15 @@ def denial_comment(u: Vertex, v: Vertex) -> Tuple[bool, str]:
             
             if matched_ent:
                 qtype_names = [str(qt).split('.')[-1] for qt in query_types]
-                return True, f"QueryType={qtype_names} → matched Data entity types: {matched_ent}"
+                return True, f"String removed due to garbled encoding."
             else:
                 data_ents = [str(e).split('.')[-1] for e in v.ents if e != Entity.NOT_ENTITY]
                 data_poses = [str(p).split('.')[-1] for p in v.poses]
                 qtype_names = [str(qt).split('.')[-1] for qt in query_types]
-                return False, f"QueryType={qtype_names} → Data has ents={data_ents}, poses={data_poses}"
+                return False, f"String removed due to garbled encoding."
 
 
-    # 3. 同类型实体豁免
+    # Comment removed due to garbled encoding.
     u_has_ent = any(e != Entity.NOT_ENTITY for e in u.ents)
     v_has_ent = any(e != Entity.NOT_ENTITY for e in v.ents)
     if u_has_ent and v_has_ent:
@@ -326,7 +314,7 @@ def denial_comment(u: Vertex, v: Vertex) -> Tuple[bool, str]:
         v_ents = [str(e).split('.')[-1] for e in v.ents if e != Entity.NOT_ENTITY]
         return False, f"Entity-mismatch: Query ents={u_ents} vs Data ents={v_ents}"
 
-    # 4. NLI 矛盾检测
+    # Comment removed due to garbled encoding.
     label = get_nli_label(ut, vt)
     if label != "contradiction":
         return True, f"NLI={label} (non-contradiction)"
@@ -334,17 +322,15 @@ def denial_comment(u: Vertex, v: Vertex) -> Tuple[bool, str]:
         return False, f"NLI={label} (contradiction)"
     
 def denial_comment_by_label(u: Vertex, v: Vertex, label: str) -> Tuple[bool, str]:
-    """
-    返回 (是否非冲突, 原因说明)
-    """
+    """ Docstring removed due to garbled encoding. """
     ut = u.text().strip()
     vt = v.text().strip()
     
-    # 1. 空文本检查
+    # Comment removed due to garbled encoding.
     if not ut or not vt:
         return False, "Empty text"
     
-    # 2. 基于 QueryType 的疑问词处理
+    # Comment removed due to garbled encoding.
     if getattr(u, 'is_query', False):
         query_types = {n.query_type for n in u.nodes if hasattr(n, 'query_type') and n.query_type}
         if query_types:
@@ -369,15 +355,15 @@ def denial_comment_by_label(u: Vertex, v: Vertex, label: str) -> Tuple[bool, str
             
             if matched_ent:
                 qtype_names = [str(qt).split('.')[-1] for qt in query_types]
-                return True, f"QueryType={qtype_names} → matched Data entity types: {matched_ent}"
+                return True, f"String removed due to garbled encoding."
             else:
                 data_ents = [str(e).split('.')[-1] for e in v.ents if e != Entity.NOT_ENTITY]
                 data_poses = [str(p).split('.')[-1] for p in v.poses]
                 qtype_names = [str(qt).split('.')[-1] for qt in query_types]
-                return False, f"QueryType={qtype_names} → Data has ents={data_ents}, poses={data_poses}"
+                return False, f"String removed due to garbled encoding."
 
 
-    # 3. 同类型实体豁免
+    # Comment removed due to garbled encoding.
     u_has_ent = any(e != Entity.NOT_ENTITY for e in u.ents)
     v_has_ent = any(e != Entity.NOT_ENTITY for e in v.ents)
     if u_has_ent and v_has_ent:
@@ -399,7 +385,7 @@ def denial_comment_by_label(u: Vertex, v: Vertex, label: str) -> Tuple[bool, str
         v_ents = [str(e).split('.')[-1] for e in v.ents if e != Entity.NOT_ENTITY]
         return False, f"Entity-mismatch: Query ents={u_ents} vs Data ents={v_ents}"
 
-    # 4. NLI 矛盾检测
+    # Comment removed due to garbled encoding.
     if label != "contradiction":
         return True, f"NLI={label} (non-contradiction)"
     else:
@@ -407,15 +393,7 @@ def denial_comment_by_label(u: Vertex, v: Vertex, label: str) -> Tuple[bool, str
     
     
 def denial_comment_by_label_hard(u: Vertex, v: Vertex, label: str) -> Tuple[bool, str]:
-    """
-    返回 (是否匹配, 原因说明)
-
-    hard 规则：
-    1) 虚节点直接不匹配。
-    2) Query 节点先按 QueryType 规则匹配。
-    3) 非 Query 节点按严格类型分组匹配。
-    4) 以上任意匹配路径都必须满足 NLI != contradiction 。
-    """
+    """ Docstring removed due to garbled encoding. """
     ut = u.text().strip()
     vt = v.text().strip()
     
@@ -442,12 +420,7 @@ def compute_allowed_pairs_batch_with_score(
     query_vertices: Dict[int, Vertex],
     data_vertices: Dict[int, Vertex]
 ) -> Tuple[Set[Tuple[int, int]], Dict[Tuple[int, int], float]]:
-    """
-    批量计算 allowed pairs，并返回每对的匹配置信度（基于 NLI 结果的 score）
-
-    先按 hard 规则预筛类型，只对可能通过 `denial_comment_by_label_hard` 的 pair
-    调用 `get_nli_labels_with_score_batch`，减少 NLI 计算开销。
-    """
+    """ Docstring removed due to garbled encoding. """
     logger = getLogger("denial_comment")
     
     if not query_vertices or not data_vertices:
@@ -492,14 +465,14 @@ def compute_allowed_pairs_batch_with_score(
         
         log_entry = f"Q{q_id}: '{qt}' vs D{d_id}: '{dt}' (reason: {reason}, NLI={nli_label}, score={nli_score:.4f})"
         if is_allowed:
-            # print(f"✅ ALLOWED: {q_vertex.text()} <-> {d_vertex.text()} with confidence {nli_score:.4f}")
+            # Comment removed due to garbled encoding.
             allowed.add((q_id, d_id))
             confidence_scores[(q_id, d_id)] = nli_score
         else:
             contradicted_count += 1
-            # print(f"❌ CONTRADICTED: {q_vertex.text()} <-> {d_vertex.text()} with confidence {nli_score:.4f}")
+            # Comment removed due to garbled encoding.
 
-    # 全量日志输出
+    # Comment removed due to garbled encoding.
     if logger is not None:
         total = len(query_vertices) * len(data_vertices)
         logger.info(f"Total Q-D pairs processed: {total}")
@@ -515,10 +488,7 @@ def compute_allowed_pairs_batch_with_score(
     return allowed, confidence_scores
 
 def get_top_k_matched_vertices_by_scores(query_vertices: Dict[int, Vertex], data_vertices: Dict[int, Vertex], confidence_scores: Dict[Tuple[int, int], float], k: int) -> Dict[Vertex, Set[Tuple[Vertex, float]]]:
-    """
-    从 confidence_scores 中获取每个 query vertex 的 top-k 匹配 data vertices
-    返回格式：{q_id: [(d_id, score), ...]}
-    """
+    """ Docstring removed due to garbled encoding. """
     top_k_matches: Dict[Vertex, List[Tuple[Vertex, float]]] = {}
     for (q_id, d_id), score in confidence_scores.items():
         q_vertex = query_vertices[q_id]
@@ -530,7 +500,7 @@ def get_top_k_matched_vertices_by_scores(query_vertices: Dict[int, Vertex], data
     result: Dict[Vertex, Set[Tuple[Vertex, float]]] = {}
     
     for q_vertex, matches in top_k_matches.items():
-        matches.sort(key=lambda x: x[1], reverse=True)  # 按 score 降序排序
-        result[q_vertex] = set(matches[:k])  # 取 top-k
+        matches.sort(key=lambda x: x[1], reverse=True)  # Comment removed due to garbled encoding.
+        result[q_vertex] = set(matches[:k])  # Comment removed due to garbled encoding.
     
     return result

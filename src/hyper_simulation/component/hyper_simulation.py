@@ -1,4 +1,4 @@
-﻿import time
+import time
 from typing import Dict, List, Set, Tuple
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from simulation import Hypergraph as SimHypergraph, Hyperedge as SimHyperedge, Node, Delta, DMatch
@@ -13,7 +13,7 @@ import logging
 def convert_local_to_sim(
     local_hg: LocalHypergraph,
 ) -> Tuple[SimHypergraph, Dict[int, str], Dict[int, Vertex], Dict[int, List[SimHyperedge]], Dict[Vertex, int]]:
-    """杞崲LocalHypergraph 鈫?SimHypergraph锛岃繑鍥濻im ID绌洪棿鏄犲皠"""
+    """Convert LocalHypergraph to SimHypergraph and return Sim ID mapping."""
     sim_hg = SimHypergraph()
     vertex_id_map: Dict[int, int] = {}
     node_text: Dict[int, str] = {}
@@ -60,11 +60,11 @@ def build_delta_and_dmatch(
     is_multihop: bool = False,
 ) -> Tuple[Delta, DMatch]:
     """
-    鏋勫缓Delta鍜孌-Match锛岀‘淇?00%瑕嗙洊allowed_pairs
-    鍏抽敭璁捐锛?
-      1. 澶氳妭鐐圭皣锛氱粨鏋勫寲鍖归厤锛堝紓甯告椂闄嶇骇涓虹┖鍖归厤锛?
-      2. 鍗曡妭鐐圭皣锛氭棤鏉′欢鍏滃簳锛堢粫杩嘗ocalVertex鏄犲皠锛岀洿鎺ヤ娇鐢⊿im ID锛?
-      3. D-Match瀹屽鎬э細姣忎釜Delta鏉＄洰蹇呮湁D-Match鏉＄洰锛堢┖闆嗕篃鏈夋晥锛?
+    Construct Delta and D-Match, ensuring 100% coverage of allowed_pairs.
+    Key design:
+      1. Multi-node clusters: Structural matching (downgrade to empty match on exception).
+      2. Single-node clusters: Unconditional fallback (bypass LocalVertex mapping, use Sim ID directly).
+      3. D-Match completeness: Every Delta item must have a D-Match item (empty set is also valid).
     """
     
     delta_start = time.time()
@@ -74,9 +74,9 @@ def build_delta_and_dmatch(
     delta = Delta()
     d_delta_matches: Dict[Tuple[int, int], Set[Tuple[int, int]]] = {}
     
-    # Step 1: 澶氳妭鐐硅涔夌皣锛堟壒閲忕粨鏋勫寲鍖归厤锛?
+    # Step 1: Multi-node semantic clusters (batch structural matching)
     cluster_count = 0
-    # === 闃舵1锛氳褰曞師濮嬬粨鏋滐紙鏉ヨ嚜 get_semantic_cluster_pairs锛?==
+    # === Phase 1: Record original results (from get_semantic_cluster_pairs) ===
     raw_pairs = calc_semantic_cluster_pairs(
         query_local_hg, data_local_hg, matched_vertices, 
         cluster_sim_threshold, branch_threshold, is_multihop, logger=sc_logger
@@ -87,11 +87,11 @@ def build_delta_and_dmatch(
     
     time1 = time.time()
     # print(f"Semantic cluster pair calculation time: {time1 - delta_start:.2f} seconds")
-    sc_logger.info(f"璇箟绨囩敓鎴愬畬鎴? 鍏?{len(raw_pairs)} 涓師濮嬬皣瀵?)
-    # === 闃舵2锛氱涓€閬嶅惊鐜?- 杩囨护骞舵敹闆嗗€欓€夌皣瀵?===
+    sc_logger.info(f"Semantic cluster generation complete. Total {len(raw_pairs)} original cluster pairs.")
+    # === Phase 2: First iteration - Filter and collect candidate cluster pairs ===
     candidate_cluster_pairs = []  # list of (sc_q, sc_d, sim_score, metadata_dict)
     for sc_q, sc_d, sim_score in raw_pairs:
-        # --- 鎻愬彇缁撴瀯淇℃伅 ---
+        # --- Extract structural information ---
         q_vertices = sc_q.get_vertices()
         d_vertices = sc_d.get_vertices()
         q_edges = sc_q.hyperedges
@@ -100,16 +100,16 @@ def build_delta_and_dmatch(
         q_triples = sc_q.to_triple() or []
         d_triples = sc_d.to_triple() or []
 
-        # 鍙栫涓€涓笁鍏冪粍浣滀负浠ｈ〃锛堣嫢瀛樺湪锛?
+        # Take the first triple as representative (if exists)
         q_triple_repr = str(q_triples[0]) if q_triples else "(no triple)"
         d_triple_repr = str(d_triples[0]) if d_triples else "(no triple)"
 
         q_text = sc_q.text()
         d_text = sc_d.text()
 
-        # --- 鏃ュ織锛氬師濮嬬皣璇︽儏锛堟棤璁烘槸鍚﹂噰绾筹級---
+        # --- Log: Original cluster details (whether adopted or not) ---
         sc_logger.info(
-            f"鈫?鍘熷绨囧 | score={sim_score:.3f}\n"
+            f"-> Original cluster pair | score={sim_score:.3f}\n"
             f"  Q: text='{q_text}'\n"
             f"     triple={q_triple_repr}\n"
             f"     nodes={len(q_vertices)}, edges={len(q_edges)}\n"
@@ -118,15 +118,15 @@ def build_delta_and_dmatch(
             f"     nodes={len(d_vertices)}, edges={len(d_edges)}"
         )
 
-        # --- 杩囨护閫昏緫锛堜繚鎸佷笉鍙橈級---
+        # --- Filtering logic ---
         if sim_score < 0.5:
-            sc_logger.info(f"  鈫?璺宠繃: 浣庣浉浼煎害 ({sim_score:.3f})")
+            sc_logger.info(f"  -> Skip: Low similarity ({sim_score:.3f})")
             continue
 
         q_vs = [v for v in q_vertices if not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX))]
         d_vs = [v for v in d_vertices if not (v.pos_equal(Pos.VERB) or v.pos_equal(Pos.AUX))]
         if not q_vs or not d_vs:
-            sc_logger.info(f"  鈫?璺宠繃: 鏃犲悕璇嶈妭鐐?(Q:{len(q_vs)}/{len(q_vertices)}, D:{len(d_vs)}/{len(d_vertices)})")
+            sc_logger.info(f"  -> Skip: No noun nodes (Q:{len(q_vs)}/{len(q_vertices)}, D:{len(d_vs)}/{len(d_vertices)})")
             continue
 
         q_rep = min(q_vs, key=lambda v: v.id)
@@ -134,7 +134,7 @@ def build_delta_and_dmatch(
         q_nid = vertex_to_sim_id_q.get(q_rep)
         d_nid = vertex_to_sim_id_d.get(d_rep)
         if q_nid is None or d_nid is None:
-            sc_logger.info(f"  鈫?璺宠繃: 鏄犲皠缂哄け (Q{q_rep.id}鈫抺q_nid}, D{d_rep.id}鈫抺d_nid})")
+            sc_logger.info(f"  -> Skip: Missing mapping (Q{q_rep.id}->{q_nid}, D{d_rep.id}->{d_nid})")
             continue
 
         q_es = list({e for v in q_vs if v in vertex_to_sim_id_q for e in query_node_edges.get(vertex_to_sim_id_q[v], []) if e})
@@ -147,7 +147,7 @@ def build_delta_and_dmatch(
             d_es
         )
 
-        # 瀛樺偍鍏冩暟鎹緵鎵归噺澶勭悊浣跨敤
+        # Store metadata for batch processing
         candidate_cluster_pairs.append({
             'sc_q': sc_q,
             'sc_d': sc_d,
@@ -167,18 +167,18 @@ def build_delta_and_dmatch(
             'sim_score': sim_score,
         })
 
-    # === 闃舵3锛氭壒閲忚绠?D-Match ===
+    # === Phase 3: Batch calculate D-Match ===
     if candidate_cluster_pairs:
         sc_pairs = [(md['sc_q'], md['sc_d']) for md in candidate_cluster_pairs]
         try:
             batch_results = calc_d_match_batch(sc_pairs, dmatch_threshold)
         except (AssertionError, AttributeError, IndexError) as e:
-            sc_logger.warning(f"  鈫?鎵归噺鍖归厤寮傚父: {type(e).__name__}, 闄嶇骇涓虹┖鍖归厤")
+            sc_logger.warning(f"  -> Batch match exception: {type(e).__name__}, downgrading to empty match")
             batch_results = [[] for _ in sc_pairs]
     else:
         batch_results = []
 
-    # === 闃舵4锛氬鐞嗘壒閲忕粨鏋滃苟璁板綍鏃ュ織 ===
+    # === Phase 4: Process batch results and log ===
     for batch_idx, meta in enumerate(candidate_cluster_pairs):
         cluster_count += 1
         sc_id = meta['sc_id']
@@ -196,7 +196,7 @@ def build_delta_and_dmatch(
         d_edges = meta['d_edges']
         sim_score = meta['sim_score']
 
-        # 浠庢壒閲忕粨鏋滀腑鎻愬彇褰撳墠绨囧鐨勫尮閰?
+        # Extract matches for the current cluster pair from batch results
         if batch_idx < len(batch_results):
             matches = {
                 (vertex_to_sim_id_q[vq], vertex_to_sim_id_d[vd])
@@ -208,9 +208,9 @@ def build_delta_and_dmatch(
 
         d_delta_matches[(sc_id, sc_id)] = matches
 
-        # --- 鏃ュ織锛氶噰绾崇殑绨囷紙鍚畬鏁寸粨鏋勶級---
+        # --- Log: Adopted cluster (with complete structure) ---
         sc_logger.info(
-            f"鈫?閲囩撼 #{cluster_count} | score={sim_score:.3f}\n"
+            f"-> Adopted #{cluster_count} | score={sim_score:.3f}\n"
             f"  Q_rep=Q{q_rep.id}('{q_rep.text()}')\n"
             f"     full_text='{q_text}'\n"
             f"     triple={q_triple_repr}\n"
@@ -222,9 +222,9 @@ def build_delta_and_dmatch(
             f"  D-Match count: {len(matches)}"
         )
 
-    sc_logger.info(f"璇箟绨囨瀯寤哄畬鎴? 鍘熷 {len(raw_pairs)} 鈫?鏈夋晥 {cluster_count} 涓皣瀵?)   
+    sc_logger.info(f"Semantic cluster construction complete. Original {len(raw_pairs)} -> Valid {cluster_count} cluster pairs.")   
     
-    # Step 2: 涓篴llowed_pairs涓瘡涓妭鐐瑰鍒涘缓鍗曡妭鐐圭皣
+    # Step 2: Create single-node cluster for each node pair in allowed_pairs
     # for q_id, d_id in allowed_pairs:
     #     sc_id = delta.add_sematic_cluster_pair(
     #         Node(q_id, query_texts.get(q_id, "")),
@@ -232,7 +232,7 @@ def build_delta_and_dmatch(
     #         query_node_edges.get(q_id, []),
     #         data_node_edges.get(d_id, [])
     #     )
-    #     d_delta_matches[(sc_id, sc_id)] = {(q_id, d_id)}  # 鍗曡妭鐐圭皣蹇呮湁鑷韩鍖归厤
+    #     d_delta_matches[(sc_id, sc_id)] = {(q_id, d_id)}  # Single-node cluster must have self-match
     
     time2 = time.time()
     # print(f"D-Match compute time: {time2 - time1:.2f} seconds")
@@ -248,19 +248,19 @@ def compute_hyper_simulation(
     delta_threshold: float = 0.7,
 ) -> Tuple[Dict[int, Set[int]], Dict[int, Vertex], Dict[int, Vertex]]:
     """
-    鎵ц瓒呭浘妯℃嫙
-    鐞嗚淇濊瘉锛歵ype_same(u,v)=True 鈬?鈭冭涔夌皣瑕嗙洊(u,v)锛堥€氳繃鏃犳潯浠跺厹搴曞疄鐜帮級
+    Execute hypergraph simulation.
+    Theoretical guarantee: type_same(u,v)=True -> semantic cluster covers (u,v) (via unconditional fallback).
     """
     sim_logger = getLogger("hyper_simulation")
     sim_logger.debug(f"\tStart Hyper Simulation")
     
-    # 杞崲鍒癝imHypergraph绌洪棿锛堣幏寰楄繛缁璑ode ID锛?
+    # Convert to SimHypergraph space (get continuous Node ID)
     q_sim, q_texts, q_vertices, q_edges, q_vid_map = convert_local_to_sim(query_hg)
     d_sim, d_texts, d_vertices, d_edges, d_vid_map = convert_local_to_sim(data_hg)
     
     denial_start = time.time()
     sim_logger.debug(f"\tstart denial comment calc")
-    # 璁＄畻瀹芥澗鐨勮涔夊厑璁告€?
+    # Calculate loose semantic allowability
     dc_logger = getLogger("denial_comment")
     # allowed = compute_allowed_pairs(q_vertices, d_vertices)
     time1 = time.time()
@@ -273,7 +273,7 @@ def compute_hyper_simulation(
     # calc the match_vertices based on the confidence_scores and q_vertices and d_vertices
     match_vertices = get_top_k_matched_vertices_by_scores(q_vertices, d_vertices, confidence_scores, k=b_threshold)
     # match_vertices = get_matched_vertices(q_vertices_list, d_vertices_list)
-    # 瀹氫箟type_same_fn锛堝熀浜嶴im ID绌洪棿锛?
+    # Define type_same_fn (based on Sim ID space)
     def type_same_fn(x_id: int, y_id: int) -> bool:
         return (x_id, y_id) in allowed
     
@@ -286,7 +286,7 @@ def compute_hyper_simulation(
     sim_logger.debug(f"\tdenial comment cost {denial_end - denial_start}s")
     sim_logger.debug(f"\tstart build delta and d-match")
     
-    # 鏋勫缓Delta/D-Match锛?00%瑕嗙洊淇濋殰 + 寮傚父闅旂锛?
+    # Construct Delta/D-Match: 100% coverage guarantee + exception isolation
     delta, d_match = build_delta_and_dmatch(
         q_sim, d_sim, q_texts, d_texts, q_edges, d_edges, allowed,
         query_local_hg=query_hg,
@@ -302,18 +302,18 @@ def compute_hyper_simulation(
     # print(f"Delta and D-Match time: {time4 - time3:.2f} seconds")
 
     
-    # 鎵ц瓒呭浘妯℃嫙
+    # Execute hypergraph simulation
     start_time = time.time()
-    sim_logger.info("\t鎵ц瓒呭浘妯℃嫙...")
+    sim_logger.info("\tExecuting hypergraph simulation...")
     simulation = SimHypergraph.get_hyper_simulation(q_sim, d_sim, delta, d_match)
     # simulation = SimHypergraph.get_hyper_simulation_strict(q_sim, d_sim, delta, d_match)
-    # === 鏂板锛氱粨鏋勫寲杈撳嚭 simulation 缁撴灉锛圛NFO 绾у埆锛?==
+    # === New: Structured output of simulation results (INFO level) ===
     sim_logger.info("\t=== Hyper Simulation Mapping ===")
     for q_id, d_ids in sorted(simulation.items()):
-        # Query 渚ф枃鏈?
+        # Query side text
         q_text = q_vertices[q_id].text() if q_id in q_vertices else f"[Q{q_id}]"
         
-        # Data 渚э細ID + 鏂囨湰
+        # Data side: ID + Text
         if d_ids:
             d_items = []
             for d_id in sorted(d_ids):
@@ -326,18 +326,18 @@ def compute_hyper_simulation(
         else:
             targets = "-"
 
-        sim_logger.info(f"\t  Q{q_id}: '{q_text}' 鈫?{targets}")
+        sim_logger.info(f"\t  Q{q_id}: '{q_text}' -> {targets}")
     sim_logger.info("\t================================")
     end_time = time.time()
-    sim_logger.info(f"\t妯℃嫙瀹屾垚: {len(simulation)}涓槧灏?)
+    sim_logger.info(f"\tSimulation complete: {len(simulation)} mappings.")
     sim_logger.info(f"\thyper simulation main cost {end_time - start_time}s")
 
     return simulation, q_vertices, d_vertices
 
 # Apple / Banana
-# 涓棿鍙兘浼氬瓨鍦ㄤ竴浜涚壒娈婄鍙?
+# Special characters may exist in the middle.
 
-# 1. 澶勭悊涓嶄簡闈炴爣鍑嗙鍙?
-# 2. 鍙兘浼氶敊璇湴鎶婁竴浜泃oken涓巘oken璺熺潃鐨勬爣鐐圭鍙峰悎骞跺埌涓€璧凤紝褰卞搷锛氱▼搴忓穿婧冩垨鑰呭彲鑳介潪甯稿奖鍝嶄緷瀛樺垎鏋愮殑缁撴灉
+# 1. Cannot handle non-standard characters.
+# 2. May mistakenly merge a token with the punctuation following it, impact: program crash or severely affect dependency parsing results.
 
 

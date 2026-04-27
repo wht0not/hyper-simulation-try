@@ -6,9 +6,19 @@ import logging
 from hyper_simulation.utils.log import getLogger
 
 logger = getLogger(__name__)
-# import index
 
 class Vertex:
+    """
+    Represents a vertex in a hypergraph, essentially a grouping of one or more linguistic nodes.
+
+    Assumptions:
+    - Nodes grouped into a single vertex are considered to refer to the same conceptual entity or share a strong semantic relationship.
+    - A vertex caches properties like Parts-of-Speech (POS) and Entity Types (ENT) to optimize frequent comparisons.
+
+    Tradeoffs:
+    - Memory vs. Speed: Caching POS, ENT, and provenance information increases memory footprint but significantly speeds up domain/type matching during simulation.
+    - Type Resolution: Relies on heuristics (e.g., NER -> WordNet -> POS fallback) for semantic domain matching, which might occasionally misclassify ambiguous terms but works well for most factual text.
+    """
     def __init__(self, id: int, nodes: list[Node]):
         self.id = id
         self.nodes = nodes
@@ -348,6 +358,16 @@ class Vertex:
         return None
 
 class Hyperedge:
+    """
+    Represents an n-ary relationship among multiple vertices in the hypergraph.
+
+    Assumptions:
+    - Directed structure: One root vertex anchors the hyperedge, representing the main action or predicate, and other vertices represent arguments.
+    - Each hyperedge maps directly to a span of tokens in the original sentence or document.
+
+    Tradeoffs:
+    - Root-centric mapping limits representation of perfectly symmetrical relationships but simplifies structural traversal and subgraph matching.
+    """
     def __init__(self, root: Vertex, vertices: list[Vertex], desc: str, full_desc: str, start: int, end: int):
         self.root = root
         self.vertices = vertices
@@ -440,7 +460,6 @@ class Hyperedge:
         """Get a cleaned description using resolved node texts within the sentence range."""
         sentence = self.desc or ""
         sentence_by_range = self.full_desc or ""
-        # print(f"Hyperedge.text(): sentence_by_range='{sentence_by_range}' in sentence='{sentence}'")
         # Helper to extract prefix/suffix
         def calc_prefix_suffix(range_text: str, full_sentence: str) -> tuple[str, str]:
             if not range_text or not full_sentence:
@@ -459,12 +478,10 @@ class Hyperedge:
         root_node = self.current_node(self.root)
         for vertex in self.vertices:
             node = self.current_node(vertex)
-            # print(f"<'{node.text}'>")
             if node == root_node:
                 continue
             resolved_text = Vertex.resolved_text(node)
             original_text = node.covered_sentence
-            # print(f"    '{original_text}' --> '{resolved_text}'")
             if original_text and resolved_text:
                 replacement.append((original_text, resolved_text))
 
@@ -556,6 +573,13 @@ class Hyperedge:
     
 
 class Path:
+    """
+    Represents a sequence of hyperedges forming a continuous path in the hypergraph.     
+
+    Assumptions:
+    - Paths represent logical or semantic traversal across connected entities.
+    - Used primarily for finding multi-hop connections.
+    """
     def __init__(self, hyperedges: list[Hyperedge]) -> None:
         self.hyperedges: list[Hyperedge] = hyperedges
     
@@ -564,6 +588,16 @@ class Path:
     
 
 class Hypergraph:
+    """
+    Main structure holding all vertices and hyperedges for a given document or query.    
+
+    Assumptions:
+    - Centralizes semantic network topology.
+    - Path and neighbor caches assume the graph structure is static after initialization.
+
+    Tradeoffs:
+    - Precomputing/caching maps limits dynamic updates but heavily optimizes repeated topological queries during semantic matching and simulation.
+    """
     def __init__(self, vertices: list[Vertex], hyperedges: list[Hyperedge], doc: LocalDoc) -> None:
         self.vertices: list[Vertex] = vertices
         self.hyperedges: list[Hyperedge] = hyperedges
