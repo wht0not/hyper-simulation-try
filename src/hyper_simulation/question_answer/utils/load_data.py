@@ -693,6 +693,22 @@ def load_data(file_path: str, task: str = "hotpotqa", use_supporting_only: bool 
         return load_multihop_data(file_path)
     elif task == "ARC":
         return load_arc_data(file_path)
+    elif task == "locomo":
+        data = []
+        with open(file_path, 'r', encoding='utf-8') as f:
+            raw_data = json.load(f)
+            entries = raw_data.get("entries", [])
+            for idx, item in enumerate(entries):
+                context = [("doc", [text]) for text in item.get("d", [])]
+                formatted_item = {
+                    "_id": f"locomo_{idx}",
+                    "question": item.get("q", ""),
+                    "answer": item.get("golden_answer", ""),
+                    "context": context,
+                    "supporting_flags": [bool(l) for l in item.get("labels", [])],
+                }
+                data.append(formatted_item)
+        return data
     
     else:
         raise ValueError(f"Unsupported task: {task}")

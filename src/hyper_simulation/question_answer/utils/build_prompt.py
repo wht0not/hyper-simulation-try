@@ -9,6 +9,7 @@ from hyper_simulation.prompt.legalbench_insurance import LEGALBENCH_INSURANCE_BA
 from hyper_simulation.prompt.legalbench_corporate_lobbying import LEGALBENCH_CORPORATE_LOBBYING_BASE
 from hyper_simulation.prompt.legalbench_scalr import LEGALBENCH_SCALR_BASE
 from hyper_simulation.prompt.arc import ARC_BASE
+from hyper_simulation.prompt.locomo import LOCOMO_QA_BASE
 
 def build_prompt(question: str, context_text: str, task: str = "hotpotqa", context_type: str | None = None) -> str:
     """
@@ -111,6 +112,11 @@ def build_prompt(question: str, context_text: str, task: str = "hotpotqa", conte
         )
     elif task == "ARC":
         prompt = ARC_BASE.format(
+            context_text=context_text,
+            question=question
+        )
+    elif task == "locomo":
+        prompt = LOCOMO_QA_BASE.format(
             context_text=context_text,
             question=question
         )

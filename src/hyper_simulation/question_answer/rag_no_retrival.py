@@ -55,11 +55,11 @@ def run_rag_evaluation(
                     if q:
                         processed_questions.add(q)
                 
-                print(f"鉁?鍙戠幇宸叉湁缁撴灉鏂囦欢锛屽凡鍔犺浇 {len(processed_questions)} 鏉″凡瀹屾垚璁板綍銆傚皢浠庢柇鐐瑰缁х画銆?)
+                print(f"发现已有结果文件，已加载 {len(processed_questions)} 条已完成记录。将从断点处继续。")
             except Exception as e:
-                print(f"鈿狅笍 璇诲彇宸叉湁缁撴灉鏂囦欢澶辫触锛歿e}銆傚皢閲嶆柊寮€濮嬨€?)
+                print(f"读取已有结果文件失败：{e}。将重新开始。")
         else:
-            print("鈩癸笍 鏈壘鍒板凡鏈夌粨鏋滄枃浠讹紝灏嗕粠澶村紑濮嬭繍琛屻€?)
+            print("未找到已有结果文件，将从头开始运行。")
             
     # 馃敼 2. 鍔犺浇宸叉湁 Prompts锛堝鏋滄寚瀹氾級
     prompts_data = []
@@ -87,7 +87,7 @@ def run_rag_evaluation(
         # 褰撲娇鐢?load_prompts 鏃讹紝items_to_process 宸茬粡鏄繃婊ゅ悗鐨勪簡锛屽鏋滀负绌哄垯鐩存帴缁撴潫
         pass
     if not items_to_process:
-        print("鉁?鎵€鏈変换鍔″凡瀹屾垚锛佹棤闇€閲嶆柊杩愯銆?)
+        print("所有任务已完成！无需重新运行。")
         # 閲嶆柊璁＄畻涓€涓嬫渶缁堟寚鏍囧苟杩斿洖
         all_metrics_tmp = {"exact_match": [], "f1": [], "match": []}
         for r in existing_results:
@@ -130,7 +130,7 @@ def run_rag_evaluation(
     if save_prompts_only and output_path:
         prompt_save_path = Path(output_path) / f"{method}" / f"{task}.jsonl"
         prompt_save_path.parent.mkdir(parents=True, exist_ok=True)
-        print(f"馃捑 Prompts 灏嗕繚瀛樺埌锛歿prompt_save_path}")
+        print(f"Prompts 将保存到：{prompt_save_path}")
     
     config = {
         "model_name": model_name,
@@ -333,7 +333,7 @@ def run_rag_evaluation(
                     json.dump(output_data, f, indent=2, ensure_ascii=False)
                 temp_file.replace(out_file)
                 
-                print(f"馃捑 宸插閲忎繚瀛?{len(new_results_buffer)} 鏉℃柊璁板綍 (鎬昏锛歿len(full_results_to_save)})")
+                print(f"已增量保存 {len(new_results_buffer)} 条新记录 (总计：{len(full_results_to_save)})")
             
             # 鏇存柊 existing_results 浠ヤ究涓嬫澧為噺淇濆瓨鍖呭惈涔嬪墠鐨勬暟鎹?
             existing_results.extend(new_results_buffer)
@@ -352,7 +352,7 @@ def run_rag_evaluation(
                     writer.write(entry)
             print(f"馃捑 宸蹭繚瀛樺墿浣?{len(prompts_buffer)} 鏉?Prompts 鍒?{prompt_save_path}")
         else:
-            print("鈿狅笍 鎻愮ず璇嶇紦鍐查潪绌猴紝浣嗘湭璁剧疆 prompt_save_path锛?)
+            print("提示词缓存非空，但未设置 prompt_save_path！")
     
     # 馃敼 12. 淇濆瓨鍓╀綑缁撴灉
     if new_results_buffer:
@@ -375,7 +375,7 @@ def run_rag_evaluation(
             with open(temp_file, 'w', encoding='utf-8') as f:
                 json.dump(output_data, f, indent=2, ensure_ascii=False)
             temp_file.replace(out_file)
-            print(f"馃捑 宸蹭繚瀛樺墿浣?{len(new_results_buffer)} 鏉¤褰?(鎬昏锛歿len(full_results_to_save)})")
+            print(f"已保存剩余 {len(new_results_buffer)} 条记录 (总计：{len(full_results_to_save)})")
 
     # 璁＄畻鏈€缁堟寚鏍?
     avg_metrics = {
@@ -440,7 +440,7 @@ def main():
         '--task',
         type=str,
         default='hotpotqa',
-        choices = ['hotpotqa','musique', 'multihop', 'ARC', 'legalbench'],
+        choices = ['hotpotqa','musique', 'multihop', 'ARC', 'legalbench', 'locomo'],
         help='Task type (default: hotpotqa)'
     )
     

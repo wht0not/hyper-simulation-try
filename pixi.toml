@@ -49,7 +49,7 @@ maturin = ">=1.8.3,<2"
 hyper-simulation = { path = ".", editable = true }
 tqdm = ">=4.67.1, <5"
 torch = { version = ">=2.5.1", index = "https://download.pytorch.org/whl/cu121" }
-contrievers = { path = "src/contrievers" , editable = true }
+# contrievers = { path = "src/contrievers" , editable = true }
 # numpy = ">=1.26.0,<2"
 langchain = ">= 0.3.20"
 langchain_ollama = ">= 1.0.0"

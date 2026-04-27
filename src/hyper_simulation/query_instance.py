@@ -114,7 +114,7 @@ def build_query_instance_for_task(item: Dict[str, Any], task: str) -> QueryInsta
             query_decomposition=query_decomposition
         )
     
-    elif task == "multihop":
+    elif task == "multihop" or task == "locomo":
         ground_truths = []
         supporting_flags = item.get("supporting_flags", []) or []
         
