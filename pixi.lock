@@ -175,7 +175,6 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/9a/64/c53487d9f4968045b8afa51aed7ca44f58b2589e772f32745f3744476c82/yarl-1.23.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
       - pypi: https://files.pythonhosted.org/packages/bb/1f/e9cfd801a3f9190bf3e759c422bbfd2247db9d7f3d54a56ecde70137791a/zstandard-0.25.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
       - pypi: .
-      - pypi: src/contrievers
   hypergraph:
     channels:
     - url: https://conda.anaconda.org/conda-forge/
@@ -726,12 +725,6 @@ packages:
   - pytest-xdist ; extra == 'test-no-images'
   - wurlitzer ; extra == 'test-no-images'
   requires_python: '>=3.11'
-- pypi: src/contrievers
-  name: contrievers
-  version: 1.0.0
-  sha256: ed12f8f22e62d02b3218a1bdeca80279634cd5154734a9892d4783e262e24db2
-  requires_python: '>=3.8'
-  editable: true
 - pypi: https://files.pythonhosted.org/packages/f0/51/7e330d8fc7db6486d54d68371b9bb26591ac8a7d3cbb822df7fcaa0efe66/coreferee-1.4.1-py3-none-any.whl
   name: coreferee
   version: 1.4.1
