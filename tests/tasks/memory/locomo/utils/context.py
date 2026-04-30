@@ -5,7 +5,7 @@ from typing import Any
 
 from tqdm import tqdm
 
-from .prompt import QA_PROMPT, QA_PROMPT_CAT_5
+from prompt.base import QA_PROMPT, QA_PROMPT_CAT_5
 from .qa_utils import build_cat5_choice_question, build_question_text
 from .utils import (
     coerce_category,

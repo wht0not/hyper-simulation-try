@@ -6,11 +6,12 @@ from typing import Any
 
 
 DEFAULT_DATASET_PATHS = [
-    "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/context/locomo_context_raw.json",
+    "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/context/locomo_context.json",
 ]
 DEFAULT_OUTPUT_DIR = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data"
 DEFAULT_INSTANCES_ROOT = "/home/vincent/hyper-simulation-try/data/hypergraphs/locomo_context"
 DEFAULT_RAG_SOURCE_PATH = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/rag/locomo10_rag.json"
+DEFAULT_LANGMEM_DATASET_PATH = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/langmem/locomo10_rag.json"
 DEFAULT_MODEL_NAME = "qwen3.5:9b"
 DEFAULT_TEMPERATURE = 0.1
 
@@ -71,6 +72,8 @@ def load_existing_results(path: Path) -> list[dict[str, Any]]:
 def window_tag(path_like: str | Path) -> str:
     stem = Path(path_like).stem
     name = stem.lower()
+    if name in {"locomo10_rag", "locomo_context", "locomo_context_raw"}:
+        return ""
     if name.startswith("locomo_"):
         suffix = stem[len("locomo_") :].strip("_")
         if suffix:
@@ -86,30 +89,26 @@ def coerce_category(value: Any) -> int:
 
 
 def result_basename(method: str, tag: str) -> str:
-    method = str(method).strip()
     tag = str(tag).strip()
-    if not method:
-        raise ValueError("method is required")
     if not tag:
-        return f"locomo_{method}"
-    if tag == method or tag.startswith(f"{method}_"):
-        return f"locomo_{tag}"
-    return f"locomo_{method}_{tag}"
+        return ""
+    return tag
 
 
 def prepared_output_path(output_dir: str | Path, method: str, source_path: str | Path) -> Path:
-    tag = window_tag(source_path)
-    return Path(output_dir) / f"{result_basename(method, tag)}_prepared.json"
+    return Path(output_dir) / "prepared.json"
+
+
+def retrieved_output_path(output_dir: str | Path, method: str, source_path: str | Path) -> Path:
+    return Path(output_dir) / "retrieved.json"
 
 
 def answers_output_path(output_dir: str | Path, method: str, source_path: str | Path) -> Path:
-    tag = window_tag(source_path)
-    return Path(output_dir) / f"{result_basename(method, tag)}_answers.json"
+    return Path(output_dir) / "answers.json"
 
 
 def final_output_path(output_dir: str | Path, method: str, source_path: str | Path) -> Path:
-    tag = window_tag(source_path)
-    return Path(output_dir) / f"{result_basename(method, tag)}.json"
+    return Path(output_dir) / "final.json"
 
 
 def rag_retrieved_output_path(

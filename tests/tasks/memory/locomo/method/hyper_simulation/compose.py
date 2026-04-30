@@ -13,7 +13,7 @@ from hyper_simulation.component.postprocess import get_simulation_slice
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
 
-from utils.prompt import LOCOMO_HYPER_PROMPT, LOCOMO_HYPER_PROMPT_CAT_5
+from prompt.hyper_simulation import LOCOMO_HYPER_PROMPT, LOCOMO_HYPER_PROMPT_CAT_5
 from utils.qa_utils import build_cat5_choice_question, build_question_text
 from utils.utils import (
     coerce_category,

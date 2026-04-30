@@ -123,11 +123,14 @@ pywsd = ">=1.2.5, <2"
 sentence-transformers = ">=5.2.0, <6"
 modelscope = ">=1.34.0, <2"
 langchain-ollama = ">=1.0.0"
+langgraph = ">=1.1.1,<2"
+langmem = ">=0.0.29,<1"
 spacy = ">=3.8.11, <4"
 jsonlines = ">=4.0.0, <5"
 openai = ">=2.30.0, <3"
 faiss-gpu = ">=1.7.0" 
 tiktoken = "*"
+typing-extensions = ">=4.1.0"
 [feature.simulation.tasks]
 pre = { cmd = "python tests/unit/test_hypergraph.py"}
 test_contradoc = { cmd = "python tests/unit/test_contradoc.py" }
@@ -196,4 +199,3 @@ contradoc_time = { cmd = "python tests/tasks/contract_nli/contradoc_time.py" }
 hypergraph = { features = ["hypergraph"] }
 simulation = { features = ["simulation"] }
 default = { features = ["naive"] }
-

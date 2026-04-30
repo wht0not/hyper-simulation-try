@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -27,6 +28,27 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
+
+
+def _get_memory_cache_path(source_file: Path, chunk_size: int) -> Path:
+    chunk_size = max(1, int(chunk_size))
+    source_hash = hashlib.md5(str(source_file.resolve()).encode()).hexdigest()[:8]
+    cache_dir = source_file.parent / ".cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    return cache_dir / f"{source_file.stem}_cache_{source_hash}_chunk{chunk_size}.json"
+
+
+def _load_memory_cache(cache_path: Path) -> dict[str, Any] | None:
+    if not cache_path.exists():
+        return None
+    try:
+        return json.loads(cache_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _save_memory_cache(cache_path: Path, cache_data: dict[str, Any]) -> None:
+    safe_write_json(cache_path, cache_data)
 
 CONV_START_PROMPT = (
     "Below is a conversation between two people: {speaker_a} and {speaker_b}. "
@@ -157,6 +179,11 @@ def retrieve_rag_dataset(
     existing_map = load_existing_result_map(out_file)
     retrieved_rows = load_existing_results(out_file)
     embedding_cache: dict[str, Any] = {}
+    
+    cache_path = _get_memory_cache_path(source_file, chunk_size)
+    chunk_cache = _load_memory_cache(cache_path) or {}
+    cache_dirty = False
+    
     pbar = tqdm(total=total_questions, desc="locomo/retrieve/rag", unit="q")
 
     try:
@@ -165,6 +192,7 @@ def retrieve_rag_dataset(
             questions_raw = sample.get("question", sample.get("qa", []))
             if not isinstance(turns_raw, list) or not isinstance(questions_raw, list):
                 continue
+            
             d_start = _build_conv_prefix(turns_raw)
             turns = [
                 _format_turn(
@@ -175,7 +203,18 @@ def retrieve_rag_dataset(
                 for turn in turns_raw
                 if isinstance(turn, dict)
             ]
-            chunk_texts, chunk_turn_indices = _chunk_turns(turns, chunk_size=chunk_size)
+            
+            if sample_id in chunk_cache:
+                chunk_texts = chunk_cache[sample_id]["chunk_texts"]
+                chunk_turn_indices = chunk_cache[sample_id]["chunk_turn_indices"]
+            else:
+                chunk_texts, chunk_turn_indices = _chunk_turns(turns, chunk_size=chunk_size)
+                chunk_cache[sample_id] = {
+                    "chunk_texts": chunk_texts,
+                    "chunk_turn_indices": chunk_turn_indices
+                }
+                cache_dirty = True
+            
             if not chunk_texts:
                 for qa in questions_raw:
                     if isinstance(qa, dict):
@@ -221,6 +260,8 @@ def retrieve_rag_dataset(
                 pbar.update(1)
     finally:
         pbar.close()
+        if cache_dirty:
+            _save_memory_cache(cache_path, chunk_cache)
 
     payload = {
         "summary": {

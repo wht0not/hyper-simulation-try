@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCOMO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 PROJECT_ROOT="$(cd -- "$LOCOMO_ROOT/../../../.." && pwd)"
-LOCOMO_DATA="$LOCOMO_ROOT/data"
+LOCOMO_DATA="$LOCOMO_ROOT/data/hyper_simulation"
 CONTEXT_DATASET="$LOCOMO_ROOT/data/context/locomo_context_raw.json"
 INSTANCES_CONTEXT="$PROJECT_ROOT/data/hypergraphs/locomo_context"
 

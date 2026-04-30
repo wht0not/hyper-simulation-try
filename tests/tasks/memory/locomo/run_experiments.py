@@ -1,9 +1,19 @@
 from __future__ import annotations
 
+import sys
+import typing
+
+if not hasattr(typing, "NotRequired"):
+    try:
+        from typing_extensions import NotRequired
+        typing.NotRequired = NotRequired
+    except ImportError:
+        from typing import Optional
+        typing.NotRequired = Optional
+
 import argparse
 import json
 from pathlib import Path
-import sys
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -24,6 +34,7 @@ from utils.utils import (
     load_entries,
     load_payload_rows,
     prepared_output_path,
+    retrieved_output_path,
 )
 
 
@@ -76,6 +87,15 @@ def _load_summary(path_like: str | Path) -> dict[str, Any]:
 def _expected_count(method: str, dataset_path: str, instances_root: str, limit: int | None = None) -> int:
     if method == "context":
         return len(load_entries(Path(dataset_path), limit=limit))
+    if method == "langmem":
+        from method.langmem.compose import count_langmem_questions
+        return count_langmem_questions(dataset_path, limit=limit)
+    if method == "amem":
+        from method.amem.compose import count_amem_questions
+        return count_amem_questions(dataset_path, limit=limit)
+    if method == "memorybank":
+        from method.memorybank.compose import count_memorybank_questions
+        return count_memorybank_questions(dataset_path, limit=limit)
     if method == "hyper_simulation":
         return _count_hypersim_questions(instances_root, limit=limit)
     return 0
@@ -98,12 +118,13 @@ def run_pipeline(
     judge_max_workers: int = 4,
     llm_judge_repeat: int = 5,
 ) -> dict[str, Any]:
-    source_path = dataset_path if method == "context" else instances_root
+    source_path = dataset_path if method in {"context", "langmem", "amem", "memorybank"} else instances_root
     effective_output_dir = output_dir
-    if not source_path and stage in {"build", "compose", "all"}:
-        raise ValueError("source path is required for build/compose/all stage")
+    if not source_path and stage in {"build", "retrieve", "compose", "all"}:
+        raise ValueError("source path is required for build/retrieve/compose/all stage")
 
     build_payload: dict[str, Any] | None = None
+    retrieval_payload: dict[str, Any] | None = None
     compose_payload: dict[str, Any] | None = None
     answer_payload: dict[str, Any] | None = None
     evaluate_payload: dict[str, Any] | None = None
@@ -123,10 +144,14 @@ def run_pipeline(
         )
         return {
             "build": build_payload,
+            "retrieve": retrieval_payload,
             "compose": compose_payload,
             "answer": answer_payload,
             "evaluate": evaluate_payload,
         }
+
+    if stage == "retrieve" and method not in {"langmem", "amem", "memorybank"}:
+        raise ValueError("retrieve stage is only supported for langmem, amem and memorybank")
 
     expected_total = _expected_count(
         method=method,
@@ -140,6 +165,9 @@ def run_pipeline(
         source_path = str(_load_summary(answers_path).get("source_path", ""))
 
     default_source = source_path or prepared_path or answers_path or method
+    default_retrieved_path = ""
+    if method in {"langmem", "amem", "memorybank"} and source_path:
+        default_retrieved_path = str(retrieved_output_path(effective_output_dir, method, source_path))
     default_prepared_path = str(prepared_output_path(effective_output_dir, method, default_source))
     prepared_path = prepared_path or default_prepared_path
 
@@ -156,6 +184,10 @@ def run_pipeline(
     default_final_source = source_path or answers_path or default_answers_source
     default_final_path = str(final_output_path(effective_output_dir, method, default_final_source))
 
+    has_retrieved = _count_payload_rows(default_retrieved_path) > 0 if default_retrieved_path else False
+    has_complete_retrieved = has_retrieved and (
+        expected_total <= 0 or _count_payload_rows(default_retrieved_path) >= expected_total
+    )
     has_prepared = _count_payload_rows(prepared_path) > 0
     has_complete_prepared = has_prepared and (expected_total <= 0 or _count_payload_rows(prepared_path) >= expected_total)
     has_answers = _count_answer_predictions(answers_path) > 0
@@ -163,6 +195,49 @@ def run_pipeline(
         _count_answer_predictions(answers_path) >= max(_count_payload_rows(prepared_path), expected_total)
     )
     has_evaluated = _count_payload_rows(default_final_path) > 0
+
+    compose_input_path = dataset_path
+    if method in {"langmem", "amem", "memorybank"} and stage in {"retrieve", "all"}:
+        if stage == "all" and has_complete_retrieved:
+            compose_input_path = default_retrieved_path
+        else:
+            if method == "langmem":
+                from method.langmem.retrieval import retrieve_langmem_dataset
+
+                retrieval_payload = retrieve_langmem_dataset(
+                    dataset_path=dataset_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
+                    limit=limit,
+                )
+            elif method == "amem":
+                from method.amem.retrieval import retrieve_amem_dataset
+
+                retrieval_payload = retrieve_amem_dataset(
+                    dataset_path=dataset_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
+                    limit=limit,
+                )
+            else:
+                from method.memorybank.retrieval import retrieve_memorybank_dataset
+
+                retrieval_payload = retrieve_memorybank_dataset(
+                    dataset_path=dataset_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
+                    limit=limit,
+                )
+            compose_input_path = str(retrieval_payload["summary"]["retrieved_file"])
+
+        if stage == "retrieve":
+            return {
+                "build": build_payload,
+                "retrieve": retrieval_payload,
+                "compose": compose_payload,
+                "answer": answer_payload,
+                "evaluate": evaluate_payload,
+            }
 
     if stage in {"compose", "all"}:
         if stage == "all" and has_complete_prepared:
@@ -174,6 +249,33 @@ def run_pipeline(
                 compose_payload = prepare_context_dataset(
                     dataset_path=dataset_path,
                     output_dir=output_dir,
+                    limit=limit,
+                )
+            elif method == "langmem":
+                from method.langmem.compose import prepare_langmem_dataset
+
+                compose_payload = prepare_langmem_dataset(
+                    dataset_path=compose_input_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
+                    limit=limit,
+                )
+            elif method == "amem":
+                from method.amem.compose import prepare_amem_dataset
+
+                compose_payload = prepare_amem_dataset(
+                    dataset_path=compose_input_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
+                    limit=limit,
+                )
+            elif method == "memorybank":
+                from method.memorybank.compose import prepare_memorybank_dataset
+
+                compose_payload = prepare_memorybank_dataset(
+                    dataset_path=compose_input_path,
+                    output_dir=output_dir,
+                    model_name=model_name,
                     limit=limit,
                 )
             else:
@@ -219,6 +321,7 @@ def run_pipeline(
 
     return {
         "build": build_payload,
+        "retrieve": retrieval_payload,
         "compose": compose_payload,
         "answer": answer_payload,
         "evaluate": evaluate_payload,
@@ -227,8 +330,8 @@ def run_pipeline(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run LoCoMo experiments")
-    parser.add_argument("--method", choices=["context", "hyper_simulation"], required=True)
-    parser.add_argument("--stage", choices=["build", "compose", "answer", "evaluate", "all"], default="all")
+    parser.add_argument("--method", choices=["context", "hyper_simulation", "langmem", "amem", "memorybank"], required=True)
+    parser.add_argument("--stage", choices=["build", "retrieve", "compose", "answer", "evaluate", "all"], default="all")
     parser.add_argument("--dataset-path", type=str, default="")
     parser.add_argument("--instances-root", type=str, default=DEFAULT_INSTANCES_ROOT)
     parser.add_argument("--prepared-path", type=str, default="")
@@ -261,7 +364,7 @@ def main() -> None:
         judge_max_workers=args.judge_max_workers,
         llm_judge_repeat=args.llm_judge_repeat,
     )
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    # print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":

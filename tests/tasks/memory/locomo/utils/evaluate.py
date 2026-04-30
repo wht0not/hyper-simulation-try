@@ -33,7 +33,7 @@ def summarize_results(
 ) -> dict[str, Any]:
     category_counts: dict[int, int] = {k: 0 for k in [1, 2, 3, 4, 5]}
     metric_aliases = {
-        "bert_score_f1": "bert_score_F1",
+        "cosine_similarity": "cosine_similarity",
         "f1": "F1",
         "rouge_l": "rouge_L",
         "bleu1": "BLEU",
@@ -63,7 +63,7 @@ def summarize_results(
             continue
         metrics = row.get("metrics", {}) or {}
         category_counts[category] += 1
-        for metric_name in ["f1", "bleu1", "rouge_l", "bert_score_f1"]:
+        for metric_name in ["f1", "bleu1", "rouge_l", "cosine_similarity"]:
             metric_value = metrics.get(metric_name)
             if metric_name in metrics and metric_value is not None:
                 metric_sums[metric_name] += float(metrics.get(metric_name, 0.0))
@@ -147,7 +147,7 @@ def evaluate_single_row(
             "f1": 0.0,
             "bleu1": 0.0,
             "rouge_l": 0.0,
-            "bert_score_f1": 0.0,
+            "cosine_similarity": 0.0,
             "error": f"{type(exc).__name__}: {exc}",
         }
     if coerce_category(out_row.get("category")) != 5:
@@ -265,7 +265,7 @@ def evaluate_results_file(
                     "f1": 0.0,
                     "bleu1": 0.0,
                     "rouge_l": 0.0,
-                    "bert_score_f1": 0.0,
+                    "cosine_similarity": 0.0,
                     "llm_as_judge": {
                         "score": 0.0,
                         "mean": 0.0,

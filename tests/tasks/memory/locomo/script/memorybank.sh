@@ -4,39 +4,51 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCOMO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-LOCOMO_DATA="$LOCOMO_ROOT/data/context"
-CONTEXT_DATASET="$LOCOMO_ROOT/data/context/locomo_context_raw.json"
+LOCOMO_DATA="$LOCOMO_ROOT/data/memorybank"
+MEMORYBANK_DATASET="$LOCOMO_ROOT/data/memorybank/locomo10_rag.json"
 
+MODEL_NAME="${MODEL_NAME:-qwen3.5:9b}"
 ANSWER_BATCH_SIZE="${ANSWER_BATCH_SIZE:-5}"
 JUDGE_MAX_WORKERS="${JUDGE_MAX_WORKERS:-4}"
 LLM_JUDGE_REPEAT="${LLM_JUDGE_REPEAT:-5}"
 
-echo "Running LoCoMo context pipeline..."
+echo "Running LoCoMo memorybank pipeline..."
 pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
-  --method context \
+  --method memorybank \
   --stage all \
-  --dataset-path "$CONTEXT_DATASET" \
+  --dataset-path "$MEMORYBANK_DATASET" \
   --output-dir "$LOCOMO_DATA" \
+  --model-name "$MODEL_NAME" \
   --answer-batch-size "$ANSWER_BATCH_SIZE" \
   --judge-max-workers "$JUDGE_MAX_WORKERS" \
   --llm-judge-repeat "$LLM_JUDGE_REPEAT"
 
 # 如需分阶段跑，可手动运行：
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
-#   --method context \
-#   --stage compose \
-#   --dataset-path "$CONTEXT_DATASET" \
-#   --output-dir "$LOCOMO_DATA"
+#   --method memorybank \
+#   --stage retrieve \
+#   --dataset-path "$MEMORYBANK_DATASET" \
+#   --output-dir "$LOCOMO_DATA" \
+#   --model-name "$MODEL_NAME"
 #
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
-#   --method context \
+#   --method memorybank \
+#   --stage compose \
+#   --dataset-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_retrieved.json" \
+#   --output-dir "$LOCOMO_DATA" \
+#   --model-name "$MODEL_NAME"
+#
+# pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
+#   --method memorybank \
 #   --stage answer \
-#   --prepared-path "$LOCOMO_DATA/locomo_context_raw_prepared.json" \
+#   --prepared-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_prepared.json" \
+#   --model-name "$MODEL_NAME" \
 #   --answer-batch-size "$ANSWER_BATCH_SIZE"
 #
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
-#   --method context \
+#   --method memorybank \
 #   --stage evaluate \
-#   --answers-path "$LOCOMO_DATA/locomo_context_raw_answers.json" \
+#   --answers-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_answers.json" \
+#   --model-name "$MODEL_NAME" \
 #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
 #   --llm-judge-repeat "$LLM_JUDGE_REPEAT"

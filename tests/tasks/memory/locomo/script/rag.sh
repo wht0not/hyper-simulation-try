@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCOMO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 PROJECT_ROOT="$(cd -- "$LOCOMO_ROOT/../../../.." && pwd)"
-LOCOMO_DATA="$LOCOMO_ROOT/data"
+LOCOMO_DATA="$LOCOMO_ROOT/data/rag"
 RAG_SOURCE="$LOCOMO_ROOT/data/rag/locomo10_rag.json"
 
 ANSWER_BATCH_SIZE="${ANSWER_BATCH_SIZE:-5}"

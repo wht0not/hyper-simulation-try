@@ -12,7 +12,11 @@ import regex
 from nltk.stem import PorterStemmer
 from ollama import chat
 
-from hyper_simulation.component.embedding import get_embedding_batch
+from hyper_simulation.component.embedding import (
+    cosine_similarity,
+    get_cosine_similarity_batch,
+    get_embedding_batch,
+)
 from .utils import coerce_category
 
 
@@ -162,55 +166,37 @@ def rouge_l_score(prediction: str, golden: Any) -> float:
     return float(((1 + beta**2) * precision * recall) / (recall + beta**2 * precision))
 
 
-def bert_score_f1(prediction: str, golden: Any) -> float:
-    pred_tokens = _normalize_answer_official(str(prediction or "")).split()
-    ref_tokens = _normalize_answer_official(str(golden or "")).split()
-    if not pred_tokens or not ref_tokens:
+def cosine_similarity_score(prediction: str, golden: Any) -> float:
+    pred_text = _normalize_answer_official(str(prediction or ""))
+    ref_text = _normalize_answer_official(str(golden or ""))
+    if not pred_text or not ref_text:
         return 0.0
 
-    pred_embeddings = np.stack(get_embedding_batch(pred_tokens))
-    ref_embeddings = np.stack(get_embedding_batch(ref_tokens))
-    pred_norm = np.linalg.norm(pred_embeddings, axis=1, keepdims=True)
-    ref_norm = np.linalg.norm(ref_embeddings, axis=1, keepdims=True)
-    pred_norm[pred_norm == 0] = 1e-12
-    ref_norm[ref_norm == 0] = 1e-12
-    pred_embeddings = pred_embeddings / pred_norm
-    ref_embeddings = ref_embeddings / ref_norm
-    similarity_matrix = np.matmul(pred_embeddings, ref_embeddings.T)
-    similarity_matrix = np.clip(similarity_matrix, -1.0, 1.0)
-    precision = float(np.mean(np.max(similarity_matrix, axis=1)))
-    recall = float(np.mean(np.max(similarity_matrix, axis=0)))
-    if precision + recall == 0:
+    pred_embedding = np.asarray(get_embedding_batch([pred_text])[0], dtype=np.float32)
+    ref_embedding = np.asarray(get_embedding_batch([ref_text])[0], dtype=np.float32)
+    if float(np.linalg.norm(pred_embedding)) == 0.0 or float(np.linalg.norm(ref_embedding)) == 0.0:
         return 0.0
-    return float((2 * precision * recall) / (precision + recall))
+    return float(cosine_similarity(pred_embedding, ref_embedding))
 
 
-def _bert_score_from_tokens(
-    pred_tokens: list[str],
-    ref_tokens: list[str],
+def _cosine_similarity_from_texts(
+    text_a: str,
+    text_b: str,
     embedding_cache: dict[str, np.ndarray] | None = None,
 ) -> float:
-    if not pred_tokens or not ref_tokens:
+    pred_text = str(text_a or "")
+    ref_text = str(text_b or "")
+    if not pred_text.strip() or not ref_text.strip():
         return 0.0
     embedding_cache = embedding_cache or {}
-    missing_tokens = [token for token in set(pred_tokens + ref_tokens) if token not in embedding_cache]
-    if missing_tokens:
-        get_embedding_batch(missing_tokens, cache=embedding_cache)
-    pred_embeddings = np.stack([embedding_cache[token] for token in pred_tokens])
-    ref_embeddings = np.stack([embedding_cache[token] for token in ref_tokens])
-    pred_norm = np.linalg.norm(pred_embeddings, axis=1, keepdims=True)
-    ref_norm = np.linalg.norm(ref_embeddings, axis=1, keepdims=True)
-    pred_norm[pred_norm == 0] = 1e-12
-    ref_norm[ref_norm == 0] = 1e-12
-    pred_embeddings = pred_embeddings / pred_norm
-    ref_embeddings = ref_embeddings / ref_norm
-    similarity_matrix = np.matmul(pred_embeddings, ref_embeddings.T)
-    similarity_matrix = np.clip(similarity_matrix, -1.0, 1.0)
-    precision = float(np.mean(np.max(similarity_matrix, axis=1)))
-    recall = float(np.mean(np.max(similarity_matrix, axis=0)))
-    if precision + recall == 0:
+    missing_texts = [text for text in {pred_text, ref_text} if text not in embedding_cache]
+    if missing_texts:
+        get_embedding_batch(missing_texts, cache=embedding_cache)
+    pred_embedding = np.asarray(embedding_cache[pred_text], dtype=np.float32)
+    ref_embedding = np.asarray(embedding_cache[ref_text], dtype=np.float32)
+    if float(np.linalg.norm(pred_embedding)) == 0.0 or float(np.linalg.norm(ref_embedding)) == 0.0:
         return 0.0
-    return float((2 * precision * recall) / (precision + recall))
+    return float(get_cosine_similarity_batch([(pred_embedding, ref_embedding)], is_normalized=True)[0])
 
 
 def _extract_llm_label(text: str) -> str:
@@ -299,12 +285,12 @@ def compute_metrics(
     if category_int == 5:
         bleu1 = None
         rouge_l = None
-        bert_f1 = None
+        cosine_similarity = None
         judge = None
     else:
         bleu1 = bleu1_score(prediction, golden)
         rouge_l = rouge_l_score(prediction, golden)
-        bert_f1 = bert_score_f1(prediction, golden)
+        cosine_similarity = cosine_similarity_score(prediction, golden)
         judge = llm_judge(
             question=question,
             gold_answer=golden,
@@ -318,7 +304,7 @@ def compute_metrics(
         "f1": float(locomo_score),
         "bleu1": None if bleu1 is None else float(bleu1),
         "rouge_l": None if rouge_l is None else float(rouge_l),
-        "bert_score_f1": None if bert_f1 is None else float(bert_f1),
+        "cosine_similarity": None if cosine_similarity is None else float(cosine_similarity),
         "llm_as_judge": judge,
     }
 
@@ -334,58 +320,62 @@ def compute_base_metrics(
     if category_int == 5:
         bleu1 = None
         rouge_l = None
-        bert_f1 = None
+        cosine_similarity = None
     else:
         bleu1 = bleu1_score(prediction, golden)
         rouge_l = rouge_l_score(prediction, golden)
-        bert_f1 = bert_score_f1(prediction, golden)
+        cosine_similarity = cosine_similarity_score(prediction, golden)
     return {
         "locomo_score": float(locomo_score),
         "f1": float(locomo_score),
         "bleu1": None if bleu1 is None else float(bleu1),
         "rouge_l": None if rouge_l is None else float(rouge_l),
-        "bert_score_f1": None if bert_f1 is None else float(bert_f1),
+        "cosine_similarity": None if cosine_similarity is None else float(cosine_similarity),
     }
 
 
 def compute_base_metrics_batch(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized_predictions = [normalize_answer(row.get("prediction", "")) for row in rows]
-    token_pairs: list[tuple[list[str], list[str]]] = []
-    all_tokens: list[str] = []
+    text_pairs: list[tuple[str, Any]] = []
+    all_texts: list[str] = []
     for row, prediction in zip(rows, normalized_predictions):
         category_int = coerce_category(row.get("category"))
         if category_int == 5:
-            token_pairs.append(([], []))
+            text_pairs.append(("", ""))
             continue
-        pred_tokens = _normalize_answer_official(str(prediction or "")).split()
-        ref_tokens = _normalize_answer_official(str(row.get("answer") or "")).split()
-        token_pairs.append((pred_tokens, ref_tokens))
-        all_tokens.extend(pred_tokens)
-        all_tokens.extend(ref_tokens)
+        pred_text = _normalize_answer_official(str(prediction or ""))
+        ref_text = _normalize_answer_official(str(row.get("answer") or ""))
+        text_pairs.append((pred_text, ref_text))
+        all_texts.append(pred_text)
+        all_texts.append(ref_text)
 
     embedding_cache: dict[str, np.ndarray] = {}
-    if all_tokens:
-        get_embedding_batch(all_tokens, cache=embedding_cache)
+    if all_texts:
+        get_embedding_batch(all_texts, cache=embedding_cache)
 
     metrics_list: list[dict[str, Any]] = []
-    for row, prediction, (pred_tokens, ref_tokens) in zip(rows, normalized_predictions, token_pairs):
+    for row, prediction, (pred_text, ref_text) in zip(rows, normalized_predictions, text_pairs):
         category_int = coerce_category(row.get("category"))
         locomo_score = locomo_f1(prediction, row.get("answer"), category_int)
         if category_int == 5:
             bleu1 = None
             rouge_l = None
-            bert_f1 = None
+            cosine_similarity = None
         else:
             bleu1 = bleu1_score(prediction, row.get("answer"))
             rouge_l = rouge_l_score(prediction, row.get("answer"))
-            bert_f1 = _bert_score_from_tokens(pred_tokens, ref_tokens, embedding_cache=embedding_cache)
+            cosine_similarity = _cosine_similarity_from_texts(
+                pred_text,
+                ref_text,
+                embedding_cache=embedding_cache,
+            )
         metrics_list.append(
             {
                 "locomo_score": float(locomo_score),
                 "f1": float(locomo_score),
                 "bleu1": None if bleu1 is None else float(bleu1),
                 "rouge_l": None if rouge_l is None else float(rouge_l),
-                "bert_score_f1": None if bert_f1 is None else float(bert_f1),
+                "cosine_similarity": None if cosine_similarity is None else float(cosine_similarity),
             }
         )
     return metrics_list

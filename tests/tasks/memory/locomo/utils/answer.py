@@ -24,6 +24,23 @@ from .utils import (
     safe_write_json,
 )
 
+SLICE_RELATED_FIELDS = {
+    "slice",
+    "consistent_context",
+    "simulation_pair_count",
+    "ranked_slice_indices",
+    "selected_context_indices",
+    "slice_hit_counts",
+    "slice_critical_hit_counts",
+}
+
+
+def _resolve_row_temperature(row: dict[str, Any], default_temperature: float) -> float:
+    try:
+        return float(row.get("answer_temperature", default_temperature))
+    except Exception:
+        return float(default_temperature)
+
 
 def _answer_summary(
     rows: list[dict[str, Any]],
@@ -93,7 +110,20 @@ def run_answers(
         output_path = answers_output_path(prepared_file.parent, method, source_path or prepared_file)
     out_file = Path(output_path)
 
-    model = ChatOllama(model=model_name, temperature=temperature, reasoning=False, num_predict=8192)
+    model_cache: dict[float, ChatOllama] = {}
+
+    def get_model(temp: float) -> ChatOllama:
+        rounded_temp = round(float(temp), 4)
+        cached = model_cache.get(rounded_temp)
+        if cached is None:
+            cached = ChatOllama(
+                model=model_name,
+                temperature=rounded_temp,
+                reasoning=False,
+                num_predict=8192,
+            )
+            model_cache[rounded_temp] = cached
+        return cached
     results: list[dict[str, Any]] = load_existing_results(out_file)
     existing_map = load_existing_result_map(out_file)
     if method == "hyper_simulation":
@@ -130,11 +160,20 @@ def run_answers(
         raw_outputs: list[str] = []
         if pending_prompts:
             try:
-                raw_outputs = get_generate(pending_prompts, model)
-                if len(raw_outputs) != len(pending_prompts):
-                    raise ValueError(
-                        f"batch output size mismatch: expected {len(pending_prompts)}, got {len(raw_outputs)}"
-                    )
+                row_temperatures = [_resolve_row_temperature(row, temperature) for row in pending_rows]
+                unique_temperatures = {round(one, 4) for one in row_temperatures}
+                if len(unique_temperatures) == 1:
+                    raw_outputs = get_generate(pending_prompts, get_model(row_temperatures[0]))
+                    if len(raw_outputs) != len(pending_prompts):
+                        raise ValueError(
+                            f"batch output size mismatch: expected {len(pending_prompts)}, got {len(raw_outputs)}"
+                        )
+                else:
+                    raw_outputs = []
+                    for row, prompt in zip(pending_rows, pending_prompts):
+                        row_model = get_model(_resolve_row_temperature(row, temperature))
+                        response = row_model.invoke(prompt)
+                        raw_outputs.append(str(getattr(response, "content", response) or ""))
             except Exception as exc:
                 tqdm.write(f"[ERROR][locomo/answer/{method}] batch_start={start_idx} err={type(exc).__name__}: {exc}")
                 raw_outputs = [""] * len(pending_prompts)
@@ -153,7 +192,11 @@ def run_answers(
                 pbar.update(1)
                 continue
 
-            out_row = {k: v for k, v in row.items() if k not in {"prompt", "cat5_answer_key"}}
+            out_row = {
+                k: v
+                for k, v in row.items()
+                if k not in {"prompt", "cat5_answer_key"} and k not in SLICE_RELATED_FIELDS
+            }
             out_row["raw_prediction"] = raw
             out_row["prediction"] = prediction
             results.append(out_row)
