@@ -1,0 +1,186 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+import time
+from typing import Any
+
+from langchain_ollama import ChatOllama
+from tqdm import tqdm
+
+from method.hyper_simulation.compose import sanitize_hypersim_row
+from hyper_simulation.utils.chat_completion import get_generate
+
+from .metrics import normalize_answer
+from .qa_utils import decode_cat5_choice
+from .utils import (
+    DEFAULT_MODEL_NAME,
+    DEFAULT_TEMPERATURE,
+    answers_output_path,
+    coerce_category,
+    entry_key,
+    load_existing_result_map,
+    load_existing_results,
+    safe_write_json,
+)
+
+
+def _answer_summary(
+    rows: list[dict[str, Any]],
+    method: str,
+    model_name: str,
+    prepared_path: str,
+    source_path: str,
+    window: str,
+    elapsed_seconds: float | None = None,
+) -> dict[str, Any]:
+    summary = {
+        "method": method,
+        "model_name": model_name,
+        "prepared_path": prepared_path,
+        "source_path": source_path,
+        "window": window,
+        "total": len(rows),
+    }
+    if elapsed_seconds is not None:
+        summary["elapsed_seconds"] = round(float(elapsed_seconds), 4)
+    return summary
+
+
+def _answer_payload(
+    rows: list[dict[str, Any]],
+    method: str,
+    model_name: str,
+    prepared_file: Path,
+    source_path: str,
+    window: str,
+    elapsed_seconds: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "summary": _answer_summary(
+            rows=rows,
+            method=method,
+            model_name=model_name,
+            prepared_path=str(prepared_file),
+            source_path=source_path,
+            window=window,
+            elapsed_seconds=elapsed_seconds,
+        ),
+        "results": rows,
+    }
+
+
+def run_answers(
+    prepared_path: str | Path,
+    output_path: str | Path | None = None,
+    model_name: str = DEFAULT_MODEL_NAME,
+    temperature: float = DEFAULT_TEMPERATURE,
+    limit: int | None = None,
+    batch_size: int = 1,
+) -> dict[str, Any]:
+    started_at = time.perf_counter()
+    prepared_file = Path(prepared_path)
+    payload = json.loads(prepared_file.read_text(encoding="utf-8"))
+    prepared_rows = payload.get("results", []) if isinstance(payload, dict) else []
+    if not isinstance(prepared_rows, list):
+        prepared_rows = []
+
+    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
+    method = str(summary.get("method", ""))
+    source_path = str(summary.get("source_path", ""))
+    window = str(summary.get("window", ""))
+    if output_path is None:
+        output_path = answers_output_path(prepared_file.parent, method, source_path or prepared_file)
+    out_file = Path(output_path)
+
+    model = ChatOllama(model=model_name, temperature=temperature, reasoning=False, num_predict=8192)
+    results: list[dict[str, Any]] = load_existing_results(out_file)
+    existing_map = load_existing_result_map(out_file)
+    if method == "hyper_simulation":
+        existing_map = {
+            key: sanitize_hypersim_row(row) if isinstance(row, dict) else row
+            for key, row in existing_map.items()
+        }
+
+    iterable_rows = [row for row in prepared_rows if isinstance(row, dict)]
+    if limit is not None and limit > 0:
+        iterable_rows = iterable_rows[:limit]
+
+    batch_size = max(1, int(batch_size))
+    pbar = tqdm(total=len(iterable_rows), desc=f"locomo/answer/{method}", unit="q")
+    for start_idx in range(0, len(iterable_rows), batch_size):
+        batch_rows = iterable_rows[start_idx : start_idx + batch_size]
+        pending_rows: list[dict[str, Any]] = []
+        pending_prompts: list[str] = []
+
+        for row in batch_rows:
+            key = entry_key(row)
+            existing = existing_map.get(key)
+            if isinstance(existing, dict) and "prediction" in existing:
+                pbar.update(1)
+                continue
+
+            prompt = str(row.get("prompt", "")).strip()
+            if not prompt:
+                pbar.update(1)
+                continue
+            pending_rows.append(row)
+            pending_prompts.append(prompt)
+
+        raw_outputs: list[str] = []
+        if pending_prompts:
+            try:
+                raw_outputs = get_generate(pending_prompts, model)
+                if len(raw_outputs) != len(pending_prompts):
+                    raise ValueError(
+                        f"batch output size mismatch: expected {len(pending_prompts)}, got {len(raw_outputs)}"
+                    )
+            except Exception as exc:
+                tqdm.write(f"[ERROR][locomo/answer/{method}] batch_start={start_idx} err={type(exc).__name__}: {exc}")
+                raw_outputs = [""] * len(pending_prompts)
+
+        for row, raw in zip(pending_rows, raw_outputs):
+            try:
+                category = coerce_category(row.get("category", -1))
+                if category == 5 and isinstance(row.get("cat5_answer_key"), dict):
+                    prediction = decode_cat5_choice(raw, row["cat5_answer_key"])
+                else:
+                    prediction = normalize_answer(raw)
+            except Exception as exc:
+                tqdm.write(
+                    f"[ERROR][locomo/answer/{method}] sample_id={row.get('sample_id')} qa_id={row.get('qa_id')} err={type(exc).__name__}: {exc}"
+                )
+                pbar.update(1)
+                continue
+
+            out_row = {k: v for k, v in row.items() if k not in {"prompt", "cat5_answer_key"}}
+            out_row["raw_prediction"] = raw
+            out_row["prediction"] = prediction
+            results.append(out_row)
+            existing_map[entry_key(out_row)] = out_row
+            safe_write_json(
+                out_file,
+                _answer_payload(
+                    rows=results,
+                    method=method,
+                    model_name=model_name,
+                    prepared_file=prepared_file,
+                    source_path=source_path,
+                    window=window,
+                    elapsed_seconds=time.perf_counter() - started_at,
+                ),
+            )
+            pbar.update(1)
+    pbar.close()
+
+    answer_payload = _answer_payload(
+        rows=results,
+        method=method,
+        model_name=model_name,
+        prepared_file=prepared_file,
+        source_path=source_path,
+        window=window,
+        elapsed_seconds=time.perf_counter() - started_at,
+    )
+    safe_write_json(out_file, answer_payload)
+    return answer_payload

@@ -17,6 +17,7 @@ import json
 import logging
 from argparse import ArgumentParser
 from pathlib import Path
+import time
 from typing import Any, Iterator
 
 import spacy
@@ -32,6 +33,20 @@ from hyper_simulation.component.build_hypergraph import (
 
 logger = logging.getLogger(__name__)
 local_model_path = "/home/vincent/.cache/huggingface/hub/models--biu-nlp--lingmess-coref/snapshots/fa5d8a827a09388d03adbe9e800c7d8c509c3935"
+
+
+def load_entries_for_build(dataset_path: str | Path) -> tuple[Path, list[dict[str, Any]]]:
+    """Load any generic entries/results dataset for hypergraph build, including rag retrieval outputs."""
+    dataset_file = Path(dataset_path)
+    if not dataset_file.exists():
+        raise FileNotFoundError(f"Dataset not found: {dataset_file}")
+
+    payload = json.loads(dataset_file.read_text(encoding="utf-8"))
+    rows = payload.get("entries", payload.get("results", [])) if isinstance(payload, dict) else []
+    if not isinstance(rows, list):
+        rows = []
+    entries = [row for row in rows if isinstance(row, dict)]
+    return dataset_file, entries
 
 
 def setup_gpu_nlp(model_name: str = "en_core_web_trf") -> Language:
@@ -245,29 +260,54 @@ def build_all_hypergraphs_single(
             logger.error("Failed data hypergraph for %s d_idx=%s: %s", instance_dir.name, d_idx, exc)
 
 
+def build_hypergraphs_from_dataset(
+    dataset_path: str | Path,
+    output_dir: str | Path,
+    batch_size: int = 128,
+    force_rebuild: bool = False,
+) -> dict[str, Any]:
+    """Build hypergraphs from any generic LoCoMo entries dataset."""
+    started_at = time.perf_counter()
+    dataset_file, entries = load_entries_for_build(dataset_path)
+    out_dir = Path(output_dir)
+    nlp = setup_gpu_nlp()
+    build_all_hypergraphs_gpu_batch(
+        nlp,
+        entries,
+        out_dir,
+        batch_size=batch_size,
+        force_rebuild=force_rebuild,
+    )
+
+    return {
+        "summary": {
+            "method": "hyper_simulation",
+            "stage": "build",
+            "dataset_path": str(dataset_file),
+            "instances_root": str(out_dir),
+            "use_gpu_batch": True,
+            "batch_size": batch_size,
+            "force_rebuild": force_rebuild,
+            "total_entries": len(entries),
+            "elapsed_seconds": round(time.perf_counter() - started_at, 4),
+        }
+    }
+
+
 def main():
     parser = ArgumentParser(description="Build Locomo Hypergraphs")
     parser.add_argument("--dataset", type=str, default="/home/vincent/hyper-simulation-try/data/bench/locomo-main/locomo-data/locomo_32K.json")
     parser.add_argument("--output-dir", type=str, default="/home/vincent/hyper-simulation-try/data/hypergraphs/locomo")
-    parser.add_argument("--use-gpu-batch", action="store_true")
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--force-rebuild", action="store_true")
     args = parser.parse_args()
 
-    dataset_path = Path(args.dataset)
-    if not dataset_path.exists():
-        logger.error(f"Dataset not found: {dataset_path}")
-        return
-
-    payload = json.loads(dataset_path.read_text(encoding="utf-8"))
-    entries = payload.get("entries", [])
-    
-    out_dir = Path(args.output_dir)
-    if args.use_gpu_batch:
-        nlp = setup_gpu_nlp()
-        build_all_hypergraphs_gpu_batch(nlp, entries, out_dir, batch_size=args.batch_size, force_rebuild=args.force_rebuild)
-    else:
-        build_all_hypergraphs_single(entries, out_dir, force_rebuild=args.force_rebuild)
+    build_hypergraphs_from_dataset(
+        dataset_path=args.dataset,
+        output_dir=args.output_dir,
+        batch_size=args.batch_size,
+        force_rebuild=args.force_rebuild,
+    )
     logger.info("Done building locomo hypergraphs.")
 
 if __name__ == "__main__":
