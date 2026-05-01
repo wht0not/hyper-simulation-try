@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import sys
 import typing
 
@@ -19,6 +18,7 @@ from typing import Any
 
 from tqdm import tqdm
 
+from .memory import build_langmem_memory_dataset, load_langmem_memories
 from utils.utils import (
     coerce_category,
     entry_key,
@@ -29,70 +29,6 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
-
-
-def _memory_cache_file(output_dir: str, sample_id: str) -> Path:
-    return Path(output_dir) / "memory" / f"{sample_id}.json"
-
-
-def _conversation_digest(chat_history: list[dict[str, Any]]) -> str:
-    payload = json.dumps(chat_history, ensure_ascii=False, sort_keys=True)
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
-
-
-def _load_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-    embedding_model_name: str,
-) -> dict[str, Any]:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    if not cache_file.exists():
-        return {}
-    try:
-        payload = json.loads(cache_file.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if not isinstance(payload, dict):
-        return {}
-    meta = payload.get("meta", {})
-    if not isinstance(meta, dict):
-        return {}
-    if meta.get("conversation_digest") != _conversation_digest(chat_history):
-        return {}
-    if str(meta.get("model_name", "")) != str(model_name):
-        return {}
-    if str(meta.get("embedding_model_name", "")) != str(embedding_model_name):
-        return {}
-    question_cache = payload.get("question_cache", {})
-    return question_cache if isinstance(question_cache, dict) else {}
-
-
-def _save_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-    embedding_model_name: str,
-    question_cache: dict[str, Any],
-) -> None:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    payload = {
-        "meta": {
-            "method": "langmem",
-            "sample_id": sample_id,
-            "model_name": model_name,
-            "embedding_model_name": embedding_model_name,
-            "conversation_digest": _conversation_digest(chat_history),
-        },
-        "question_cache": question_cache,
-    }
-    safe_write_json(cache_file, payload)
-
-
-def _question_cache_key(qa_id: str, question: str) -> str:
-    return f"{qa_id}::{question}"
 
 
 def _iter_langmem_samples(payload: Any) -> list[tuple[str, dict[str, Any]]]:
@@ -243,25 +179,20 @@ def _build_agent(model_name: str, embedding_model_name: str):
     )
 
 
-def _add_memories(
+def _load_agent_memories(
     agent: Any,
-    chat_history: list[dict[str, Any]],
+    output_dir: str,
+    sample_id: str,
     speaker_name: str,
     thread_id: str,
-    memory_pbar: Any | None = None,
 ) -> None:
     config = {"configurable": {"thread_id": thread_id}}
-    for turn in chat_history:
-        if not isinstance(turn, dict):
+    existing_memories = load_langmem_memories(output_dir=output_dir, sample_id=sample_id, speaker_name=speaker_name)
+    for memory_payload in existing_memories:
+        content = str(memory_payload.get("memory", memory_payload.get("summary", ""))).strip()
+        if not content:
             continue
-        if str(turn.get("speaker", "")).strip() != speaker_name:
-            continue
-        message = _format_memory_message(turn)
-        if not message.strip():
-            continue
-        agent.invoke({"messages": [{"role": "user", "content": message}]}, config=config)
-        if memory_pbar is not None:
-            memory_pbar.update(1)
+        agent.invoke({"messages": [{"role": "user", "content": content}]}, config=config)
 
 
 def _search_memories(agent: Any, query: str, thread_id: str) -> tuple[str, float]:
@@ -315,6 +246,13 @@ def retrieve_langmem_dataset(
         safe_write_json(out_file, payload)
         return payload
 
+    build_langmem_memory_dataset(
+        dataset_path=dataset_path,
+        output_dir=output_dir,
+        model_name=model_name,
+        limit=limit,
+    )
+
     samples = _iter_langmem_samples(raw_payload)
     if limit is not None and limit > 0:
         samples = samples[:limit]
@@ -355,63 +293,22 @@ def retrieve_langmem_dataset(
                 continue
 
             speaker_1_name, speaker_2_name = speakers[0], speakers[1]
-            question_cache = _load_sample_memory_cache(
+            speaker_1_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
+            speaker_2_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
+            _load_agent_memories(
+                speaker_1_agent,
                 output_dir=output_dir,
                 sample_id=sample_id,
-                chat_history=chat_history,
-                model_name=model_name,
-                embedding_model_name=embedding_model_name,
+                speaker_name=speaker_1_name,
+                thread_id=f"langmem-{sample_id}-speaker-1",
             )
-            cache_dirty = False
-
-            all_cached = True
-            for qa_idx, question_item in enumerate(valid_questions):
-                question = str(question_item.get("question", "")).strip()
-                qa_id = str(question_item.get("qa_id", qa_idx))
-                row_stub = {"sample_id": sample_id, "qa_id": qa_id, "q": question}
-                if entry_key(row_stub) in existing_map or not question:
-                    continue
-                cache_key = _question_cache_key(qa_id, question)
-                if cache_key not in question_cache:
-                    all_cached = False
-                    break
-
-            speaker_1_agent = None
-            speaker_2_agent = None
-            if not all_cached:
-                speaker_1_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
-                speaker_2_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
-                memory_total = _count_speaker_turns(chat_history, speaker_1_name) + _count_speaker_turns(
-                    chat_history, speaker_2_name
-                )
-                memory_pbar = (
-                    tqdm(
-                        total=memory_total,
-                        desc=f"locomo/memory/langmem/{sample_id}",
-                        unit="turn",
-                        leave=False,
-                    )
-                    if memory_total > 0
-                    else None
-                )
-                try:
-                    _add_memories(
-                        speaker_1_agent,
-                        chat_history,
-                        speaker_1_name,
-                        thread_id=f"langmem-{sample_id}-speaker-1",
-                        memory_pbar=memory_pbar,
-                    )
-                    _add_memories(
-                        speaker_2_agent,
-                        chat_history,
-                        speaker_2_name,
-                        thread_id=f"langmem-{sample_id}-speaker-2",
-                        memory_pbar=memory_pbar,
-                    )
-                finally:
-                    if memory_pbar is not None:
-                        memory_pbar.close()
+            _load_agent_memories(
+                speaker_2_agent,
+                output_dir=output_dir,
+                sample_id=sample_id,
+                speaker_name=speaker_2_name,
+                thread_id=f"langmem-{sample_id}-speaker-2",
+            )
 
             for qa_idx, question_item in enumerate(valid_questions):
                 question = str(question_item.get("question", "")).strip()
@@ -424,30 +321,12 @@ def retrieve_langmem_dataset(
                     pbar.update(1)
                     continue
 
-                cache_key = _question_cache_key(qa_id, question)
-                cached_item = question_cache.get(cache_key)
-                if isinstance(cached_item, dict):
-                    speaker_1_memories = str(cached_item.get("speaker_1_memories", "")).strip()
-                    speaker_2_memories = str(cached_item.get("speaker_2_memories", "")).strip()
-                    speaker_1_search_time = float(cached_item.get("speaker_1_search_time", 0.0) or 0.0)
-                    speaker_2_search_time = float(cached_item.get("speaker_2_search_time", 0.0) or 0.0)
-                else:
-                    if speaker_1_agent is None or speaker_2_agent is None:
-                        pbar.update(1)
-                        continue
-                    speaker_1_memories, speaker_1_search_time = _search_memories(
-                        speaker_1_agent, question, thread_id=f"langmem-{sample_id}-speaker-1"
-                    )
-                    speaker_2_memories, speaker_2_search_time = _search_memories(
-                        speaker_2_agent, question, thread_id=f"langmem-{sample_id}-speaker-2"
-                    )
-                    question_cache[cache_key] = {
-                        "speaker_1_memories": speaker_1_memories,
-                        "speaker_1_search_time": speaker_1_search_time,
-                        "speaker_2_memories": speaker_2_memories,
-                        "speaker_2_search_time": speaker_2_search_time,
-                    }
-                    cache_dirty = True
+                speaker_1_memories, speaker_1_search_time = _search_memories(
+                    speaker_1_agent, question, thread_id=f"langmem-{sample_id}-speaker-1"
+                )
+                speaker_2_memories, speaker_2_search_time = _search_memories(
+                    speaker_2_agent, question, thread_id=f"langmem-{sample_id}-speaker-2"
+                )
 
                 row = {
                     "sample_id": sample_id,
@@ -457,17 +336,13 @@ def retrieve_langmem_dataset(
                     "category": coerce_category(question_item.get("category")),
                     "method": "langmem",
                     "d": [speaker_1_memories, speaker_2_memories],
-                    "speaker_memory": {
-                        "speaker_1": {
-                            "name": speaker_1_name,
-                            "memory": speaker_1_memories,
-                            "search_time": speaker_1_search_time,
-                        },
-                        "speaker_2": {
-                            "name": speaker_2_name,
-                            "memory": speaker_2_memories,
-                            "search_time": speaker_2_search_time,
-                        },
+                    "speakers": {
+                        "speaker_1": speaker_1_name,
+                        "speaker_2": speaker_2_name,
+                    },
+                    "search_time": {
+                        "speaker_1": speaker_1_search_time,
+                        "speaker_2": speaker_2_search_time,
                     },
                 }
                 retrieved_rows.append(row)
@@ -484,15 +359,6 @@ def retrieve_langmem_dataset(
                     ),
                 )
                 pbar.update(1)
-            if cache_dirty:
-                _save_sample_memory_cache(
-                    output_dir=output_dir,
-                    sample_id=sample_id,
-                    chat_history=chat_history,
-                    model_name=model_name,
-                    embedding_model_name=embedding_model_name,
-                    question_cache=question_cache,
-                )
     finally:
         pbar.close()
 

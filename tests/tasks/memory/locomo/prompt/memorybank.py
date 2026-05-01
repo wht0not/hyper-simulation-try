@@ -136,12 +136,11 @@ def build_memorybank_answer_prompt(
             qa_id=qa_id,
         )
         payload["cat5_answer_key"] = cat5_answer_key
-        payload["prompt"] = MEMORYBANK_ANSWER_PROMPT_CAT_5.format(
-            **base_kwargs,
-            question=cat5_question,
-            option_a=cat5_answer_key["a"],
-            option_b=cat5_answer_key["b"],
-        )
+        cat5_kwargs = base_kwargs.copy()
+        cat5_kwargs["question"] = cat5_question
+        cat5_kwargs["option_a"] = cat5_answer_key["a"]
+        cat5_kwargs["option_b"] = cat5_answer_key["b"]
+        payload["prompt"] = MEMORYBANK_ANSWER_PROMPT_CAT_5.format(**cat5_kwargs)
         return payload
     if category_int == 2:
         payload["prompt"] = MEMORYBANK_ANSWER_PROMPT_CAT_2.format(**base_kwargs)

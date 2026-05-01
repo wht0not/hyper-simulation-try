@@ -5,6 +5,7 @@ import importlib
 import re
 import uuid
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 
 import numpy as np
@@ -169,6 +170,24 @@ class SimpleEmbeddingRetriever:
         for idx, doc in enumerate(docs):
             self.document_ids[doc] = start_idx + idx
 
+    def add_documents_with_embeddings(self, documents: list[str], embeddings: list[list[float]]) -> None:
+        docs = [str(doc).strip() for doc in documents if str(doc).strip()]
+        if not docs or len(docs) != len(embeddings):
+            return
+        vectors = np.array(embeddings, dtype=float)
+        if vectors.ndim != 2 or vectors.shape[0] != len(docs):
+            return
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        vectors = vectors / np.maximum(norms, 1e-12)
+        start_idx = len(self.corpus)
+        if self.embeddings is None:
+            self.embeddings = vectors
+        else:
+            self.embeddings = np.vstack([self.embeddings, vectors])
+        self.corpus.extend(docs)
+        for idx, doc in enumerate(docs):
+            self.document_ids[doc] = start_idx + idx
+
     def search(self, query: str, k: int = 5) -> list[int]:
         if not self.corpus or self.embeddings is None:
             return []
@@ -236,6 +255,26 @@ class HybridRetriever:
             self.document_ids[doc] = start_idx + idx
         self._rebuild_lexical()
 
+    def add_documents_with_embeddings(self, documents: list[str], embeddings: list[list[float]]) -> None:
+        docs = [str(doc).strip() for doc in documents if str(doc).strip()]
+        if not docs or len(docs) != len(embeddings):
+            return
+        vectors = np.array(embeddings, dtype=float)
+        if vectors.ndim != 2 or vectors.shape[0] != len(docs):
+            return
+        norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+        vectors = vectors / np.maximum(norms, 1e-12)
+        start_idx = len(self.corpus)
+        if self.embeddings is None:
+            self.embeddings = vectors
+        else:
+            self.embeddings = np.vstack([self.embeddings, vectors])
+        self.corpus.extend(docs)
+        self._tokenized_docs.extend([simple_tokenize(doc) for doc in docs])
+        for idx, doc in enumerate(docs):
+            self.document_ids[doc] = start_idx + idx
+        self._rebuild_lexical()
+
     def _lexical_scores(self, query_tokens: list[str]) -> np.ndarray:
         if not self.corpus:
             return np.array([], dtype=float)
@@ -290,19 +329,22 @@ class AgenticMemorySystem:
         llm_backend: str = "ollama",
         llm_model: str = "qwen3.5:9b",
         evo_threshold: int = 100,
-        api_key: Optional[str] = None,
-        api_base: Optional[str] = None,
-        sglang_host: str = "http://localhost",
-        sglang_port: int = 30000,
+        output_dir: str | None = None,
+        namespace: str | None = None,
     ):
-        _ = (model_name, api_key, api_base, sglang_host, sglang_port)
         if llm_backend != "ollama":
             raise ValueError("locomo/amem only supports llm_backend='ollama'.")
+        self._embedding_model_name = model_name
         self.memories: dict[str, MemoryNote] = {}
-        self.retriever = HybridRetriever(model_name=model_name)
+        self.retriever = HybridRetriever(model_name=self._embedding_model_name)
         self.llm_controller = LLMController(model=llm_model)
         self.evo_threshold = int(evo_threshold)
         self.evo_cnt = 0
+        self._namespace = str(namespace or "default").strip() or "default"
+        self._memory_dir = Path(output_dir) / "memory" if output_dir else None
+        if self._memory_dir is not None:
+            self._memory_dir.mkdir(parents=True, exist_ok=True)
+            self._load_memories_from_disk()
         self.evolution_system_prompt = """
 You are an AI memory evolution agent.
 Return a JSON object with fields:
@@ -322,22 +364,105 @@ nearest memories:
 {nearest_neighbors_memories}
 """
 
+    def _memory_file_path(self, memory_id: str) -> Path | None:
+        if self._memory_dir is None:
+            return None
+        safe_ns = re.sub(r"[^a-zA-Z0-9._-]", "_", self._namespace)
+        return self._memory_dir / f"amem_{safe_ns}.json"
+
+    def _memory_document(self, note: MemoryNote) -> str:
+        return (
+            "content:"
+            + note.content
+            + " context:"
+            + note.context
+            + " keywords: "
+            + ", ".join(note.keywords)
+            + " tags: "
+            + ", ".join(note.tags)
+        )
+
+    def _memory_payload(self, note: MemoryNote) -> dict[str, Any]:
+        return {
+            "memory_id": note.id,
+            "method": "amem",
+            "namespace": self._namespace,
+            "content": note.content,
+            "timestamp": note.timestamp,
+            "metadata": {
+                "context": note.context,
+                "keywords": note.keywords,
+                "tags": note.tags,
+                "links": note.links,
+            },
+        }
+
+    def _persist_note(self, note: MemoryNote) -> None:
+        path = self._memory_file_path(note.id)
+        if path is None:
+            return
+        payload = {
+            "method": "amem",
+            "namespace": self._namespace,
+            "memory_id": self._namespace,
+            "updated_at": datetime.now().strftime("%Y%m%d%H%M"),
+            "memories": [self._memory_payload(one_note) for one_note in self.memories.values()],
+        }
+        tmp_path = path.with_suffix(path.suffix + ".tmp")
+        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp_path.replace(path)
+
+    def _load_memories_from_disk(self) -> None:
+        if self._memory_dir is None:
+            return
+        memory_file = self._memory_file_path(self._namespace)
+        if memory_file is None or not memory_file.exists():
+            return
+        try:
+            payload = json.loads(memory_file.read_text(encoding="utf-8"))
+        except Exception:
+            return
+        if not isinstance(payload, dict):
+            return
+        rows = payload.get("memories", [])
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            memory_id = str(row.get("memory_id", row.get("id", ""))).strip()
+            metadata = row.get("metadata", {})
+            if not isinstance(metadata, dict):
+                metadata = {}
+            content = str(row.get("content", "")).strip()
+            if not memory_id or not content:
+                continue
+            note = MemoryNote(
+                content=content,
+                id=memory_id,
+                keywords=metadata.get("keywords", []),
+                links=metadata.get("links", []),
+                importance_score=1.0,
+                retrieval_count=0,
+                timestamp=str(row.get("timestamp", row.get("created_at", ""))).strip() or None,
+                last_accessed=None,
+                context=str(metadata.get("context", "General")),
+                evolution_history=[],
+                category="Uncategorized",
+                tags=metadata.get("tags", []),
+            )
+            self.memories[note.id] = note
+            self.retriever.add_documents([self._memory_document(note)])
+
     def add_note(self, content: str, time: str | None = None, **kwargs: Any) -> str:
+        note_id = str(kwargs.get("id", "")).strip()
+        if note_id and note_id in self.memories:
+            return note_id
         note = MemoryNote(content=content, llm_controller=self.llm_controller, timestamp=time, **kwargs)
         should_evolve, note = self.process_memory(note)
         self.memories[note.id] = note
-        self.retriever.add_documents(
-            [
-                "content:"
-                + note.content
-                + " context:"
-                + note.context
-                + " keywords: "
-                + ", ".join(note.keywords)
-                + " tags: "
-                + ", ".join(note.tags)
-            ]
-        )
+        self.retriever.add_documents([self._memory_document(note)])
+        self._persist_note(note)
         if should_evolve:
             self.evo_cnt += 1
             if self.evo_threshold > 0 and self.evo_cnt % self.evo_threshold == 0:

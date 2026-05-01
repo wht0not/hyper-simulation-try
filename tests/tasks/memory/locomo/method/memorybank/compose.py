@@ -52,8 +52,6 @@ def _prepare_memorybank_row(
     overall_history = str(memory_payload.get("overall_history", "")).strip()
     overall_personality = str(memory_payload.get("overall_personality", "")).strip()
     related_memory = "\n\n".join([str(one).strip() for one in d_list if str(one).strip()]).strip()
-    if not related_memory:
-        related_memory = str(memory_payload.get("related_memory", "")).strip()
     search_time = float(memory_payload.get("search_time", 0.0) or 0.0)
 
     prepared: dict[str, Any] = {
@@ -63,14 +61,6 @@ def _prepare_memorybank_row(
         "answer": answer,
         "category": category,
         "method": "memorybank",
-        "d": d_list,
-        "memorybank_memory": {
-            "user_name": user_name,
-            "overall_history": overall_history,
-            "overall_personality": overall_personality,
-            "related_memory": related_memory,
-            "search_time": search_time,
-        },
     }
     answer_prompt_payload = build_memorybank_answer_prompt(
         user_name=user_name,
@@ -122,7 +112,7 @@ def prepare_memorybank_dataset(
             if entry_key(entry) in existing_map:
                 pbar.update(1)
                 continue
-            memory_payload = entry.get("memorybank_memory", {})
+            memory_payload = entry.get("memorybank_context", {})
             if not isinstance(memory_payload, dict):
                 memory_payload = {}
             d_list = entry.get("d", [])

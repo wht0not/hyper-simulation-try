@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from pathlib import Path
@@ -8,6 +7,7 @@ from typing import Any
 
 from tqdm import tqdm
 
+from .memory import build_amem_memory_dataset, load_amem_memory_system
 from prompt.amem import build_amem_generate_query_prompt, build_amem_relevant_parts_prompt
 from utils.utils import (
     coerce_category,
@@ -19,65 +19,6 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
-
-
-def _memory_cache_file(output_dir: str, sample_id: str) -> Path:
-    return Path(output_dir) / "memory" / f"{sample_id}.json"
-
-
-def _conversation_digest(chat_history: list[dict[str, Any]]) -> str:
-    payload = json.dumps(chat_history, ensure_ascii=False, sort_keys=True)
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
-
-
-def _load_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-) -> dict[str, Any]:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    if not cache_file.exists():
-        return {}
-    try:
-        payload = json.loads(cache_file.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if not isinstance(payload, dict):
-        return {}
-    meta = payload.get("meta", {})
-    if not isinstance(meta, dict):
-        return {}
-    if meta.get("conversation_digest") != _conversation_digest(chat_history):
-        return {}
-    if str(meta.get("model_name", "")) != str(model_name):
-        return {}
-    question_cache = payload.get("question_cache", {})
-    return question_cache if isinstance(question_cache, dict) else {}
-
-
-def _save_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-    question_cache: dict[str, Any],
-) -> None:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    payload = {
-        "meta": {
-            "method": "amem",
-            "sample_id": sample_id,
-            "model_name": model_name,
-            "conversation_digest": _conversation_digest(chat_history),
-        },
-        "question_cache": question_cache,
-    }
-    safe_write_json(cache_file, payload)
-
-
-def _question_cache_key(qa_id: str, question: str) -> str:
-    return f"{qa_id}::{question}"
 
 
 def _iter_amem_samples(payload: Any) -> list[tuple[str, dict[str, Any]]]:
@@ -184,36 +125,6 @@ def _extract_json_block(raw_text: str) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
-def _get_amem_system(model_name: str):
-    from .memory_layer import AgenticMemorySystem
-
-    return AgenticMemorySystem(
-        model_name="qwen3-embedding:0.6b",
-        llm_backend="ollama",
-        llm_model=model_name,
-    )
-
-
-def _add_memories(
-    memory_system: Any,
-    chat_history: list[dict[str, Any]],
-    speaker_name: str,
-    memory_pbar: Any | None = None,
-) -> None:
-    for turn in chat_history:
-        if not isinstance(turn, dict):
-            continue
-        if str(turn.get("speaker", "")).strip() != speaker_name:
-            continue
-        message = _format_memory_message(turn)
-        if not message:
-            continue
-        timestamp = str(turn.get("timestamp", turn.get("date_time", ""))).strip() or None
-        memory_system.add_note(message, time=timestamp)
-        if memory_pbar is not None:
-            memory_pbar.update(1)
-
-
 def _search_memories(memory_system: Any, query: str, retrieve_k: int = 10) -> tuple[str, float]:
     started_at = time.perf_counter()
     try:
@@ -286,6 +197,13 @@ def retrieve_amem_dataset(
         safe_write_json(out_file, payload)
         return payload
 
+    build_amem_memory_dataset(
+        dataset_path=dataset_path,
+        output_dir=output_dir,
+        model_name=model_name,
+        limit=limit,
+    )
+
     samples = _iter_amem_samples(raw_payload)
     if limit is not None and limit > 0:
         samples = samples[:limit]
@@ -326,50 +244,8 @@ def retrieve_amem_dataset(
                 continue
 
             speaker_1_name, speaker_2_name = speakers[0], speakers[1]
-            question_cache = _load_sample_memory_cache(
-                output_dir=output_dir,
-                sample_id=sample_id,
-                chat_history=chat_history,
-                model_name=model_name,
-            )
-            cache_dirty = False
-
-            all_cached = True
-            for qa_idx, question_item in enumerate(valid_questions):
-                question = str(question_item.get("question", "")).strip()
-                qa_id = str(question_item.get("qa_id", qa_idx))
-                row_stub = {"sample_id": sample_id, "qa_id": qa_id, "q": question}
-                if entry_key(row_stub) in existing_map or not question:
-                    continue
-                cache_key = _question_cache_key(qa_id, question)
-                if cache_key not in question_cache:
-                    all_cached = False
-                    break
-
-            speaker_1_system = None
-            speaker_2_system = None
-            if not all_cached:
-                speaker_1_system = _get_amem_system(model_name=model_name)
-                speaker_2_system = _get_amem_system(model_name=model_name)
-                memory_total = _count_speaker_turns(chat_history, speaker_1_name) + _count_speaker_turns(
-                    chat_history, speaker_2_name
-                )
-                memory_pbar = (
-                    tqdm(
-                        total=memory_total,
-                        desc=f"locomo/memory/amem/{sample_id}",
-                        unit="turn",
-                        leave=False,
-                    )
-                    if memory_total > 0
-                    else None
-                )
-                try:
-                    _add_memories(speaker_1_system, chat_history, speaker_1_name, memory_pbar=memory_pbar)
-                    _add_memories(speaker_2_system, chat_history, speaker_2_name, memory_pbar=memory_pbar)
-                finally:
-                    if memory_pbar is not None:
-                        memory_pbar.close()
+            speaker_1_system = load_amem_memory_system(output_dir, sample_id, "speaker_1", speaker_1_name, model_name)
+            speaker_2_system = load_amem_memory_system(output_dir, sample_id, "speaker_2", speaker_2_name, model_name)
 
             for qa_idx, question_item in enumerate(valid_questions):
                 question = str(question_item.get("question", "")).strip()
@@ -382,43 +258,17 @@ def retrieve_amem_dataset(
                     pbar.update(1)
                     continue
 
-                cache_key = _question_cache_key(qa_id, question)
-                cached_item = question_cache.get(cache_key)
-                if isinstance(cached_item, dict):
-                    query_for_retrieval_1 = str(cached_item.get("query_for_retrieval_1", question))
-                    query_for_retrieval_2 = str(cached_item.get("query_for_retrieval_2", question))
-                    selected_speaker_1_memories = str(cached_item.get("selected_speaker_1_memories", "")).strip()
-                    selected_speaker_2_memories = str(cached_item.get("selected_speaker_2_memories", "")).strip()
-                    speaker_1_search_time = float(cached_item.get("speaker_1_search_time", 0.0) or 0.0)
-                    speaker_2_search_time = float(cached_item.get("speaker_2_search_time", 0.0) or 0.0)
-                else:
-                    if speaker_1_system is None or speaker_2_system is None:
-                        pbar.update(1)
-                        continue
-                    query_for_retrieval_1 = _generate_query_keywords(speaker_1_system, question)
-                    raw_speaker_1_memories, speaker_1_search_time = _search_memories(
-                        speaker_1_system, query_for_retrieval_1
-                    )
-                    selected_speaker_1_memories = _select_relevant_parts(
-                        speaker_1_system, raw_speaker_1_memories, question
-                    )
+                query_for_retrieval_1 = _generate_query_keywords(speaker_1_system, question)
+                raw_speaker_1_memories, speaker_1_search_time = _search_memories(speaker_1_system, query_for_retrieval_1)
+                selected_speaker_1_memories = _select_relevant_parts(
+                    speaker_1_system, raw_speaker_1_memories, question
+                )
 
-                    query_for_retrieval_2 = _generate_query_keywords(speaker_2_system, question)
-                    raw_speaker_2_memories, speaker_2_search_time = _search_memories(
-                        speaker_2_system, query_for_retrieval_2
-                    )
-                    selected_speaker_2_memories = _select_relevant_parts(
-                        speaker_2_system, raw_speaker_2_memories, question
-                    )
-                    question_cache[cache_key] = {
-                        "query_for_retrieval_1": query_for_retrieval_1,
-                        "query_for_retrieval_2": query_for_retrieval_2,
-                        "selected_speaker_1_memories": selected_speaker_1_memories,
-                        "selected_speaker_2_memories": selected_speaker_2_memories,
-                        "speaker_1_search_time": speaker_1_search_time,
-                        "speaker_2_search_time": speaker_2_search_time,
-                    }
-                    cache_dirty = True
+                query_for_retrieval_2 = _generate_query_keywords(speaker_2_system, question)
+                raw_speaker_2_memories, speaker_2_search_time = _search_memories(speaker_2_system, query_for_retrieval_2)
+                selected_speaker_2_memories = _select_relevant_parts(
+                    speaker_2_system, raw_speaker_2_memories, question
+                )
 
                 row = {
                     "sample_id": sample_id,
@@ -432,17 +282,13 @@ def retrieve_amem_dataset(
                         "speaker_2": query_for_retrieval_2,
                     },
                     "d": [selected_speaker_1_memories, selected_speaker_2_memories],
-                    "speaker_memory": {
-                        "speaker_1": {
-                            "name": speaker_1_name,
-                            "memory": selected_speaker_1_memories,
-                            "search_time": speaker_1_search_time,
-                        },
-                        "speaker_2": {
-                            "name": speaker_2_name,
-                            "memory": selected_speaker_2_memories,
-                            "search_time": speaker_2_search_time,
-                        },
+                    "speakers": {
+                        "speaker_1": speaker_1_name,
+                        "speaker_2": speaker_2_name,
+                    },
+                    "search_time": {
+                        "speaker_1": speaker_1_search_time,
+                        "speaker_2": speaker_2_search_time,
                     },
                 }
                 retrieved_rows.append(row)
@@ -458,14 +304,6 @@ def retrieve_amem_dataset(
                     ),
                 )
                 pbar.update(1)
-            if cache_dirty:
-                _save_sample_memory_cache(
-                    output_dir=output_dir,
-                    sample_id=sample_id,
-                    chat_history=chat_history,
-                    model_name=model_name,
-                    question_cache=question_cache,
-                )
     finally:
         pbar.close()
 

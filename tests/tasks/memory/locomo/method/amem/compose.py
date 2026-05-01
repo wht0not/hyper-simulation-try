@@ -65,19 +65,6 @@ def _prepare_amem_row(
         "answer": answer,
         "category": category,
         "method": "amem",
-        "d": [speaker_1_memories, speaker_2_memories],
-        "speaker_memory": {
-            "speaker_1": {
-                "name": speaker_1_name,
-                "memory": speaker_1_memories,
-                "search_time": speaker_1_search_time,
-            },
-            "speaker_2": {
-                "name": speaker_2_name,
-                "memory": speaker_2_memories,
-                "search_time": speaker_2_search_time,
-            },
-        },
     }
     answer_prompt_payload = build_amem_answer_prompt(
         context_text=context_text,
@@ -126,9 +113,10 @@ def prepare_amem_dataset(
             if entry_key(entry) in existing_map:
                 pbar.update(1)
                 continue
-            speaker_memory = entry.get("speaker_memory", {})
-            speaker_1 = speaker_memory.get("speaker_1", {}) if isinstance(speaker_memory, dict) else {}
-            speaker_2 = speaker_memory.get("speaker_2", {}) if isinstance(speaker_memory, dict) else {}
+            speakers = entry.get("speakers", {})
+            search_time = entry.get("search_time", {})
+            speaker_1_name = str(speakers.get("speaker_1", "speaker_1")) if isinstance(speakers, dict) else "speaker_1"
+            speaker_2_name = str(speakers.get("speaker_2", "speaker_2")) if isinstance(speakers, dict) else "speaker_2"
             d_list = entry.get("d", [])
             speaker_1_memories = str(d_list[0]) if isinstance(d_list, list) and len(d_list) > 0 else ""
             speaker_2_memories = str(d_list[1]) if isinstance(d_list, list) and len(d_list) > 1 else ""
@@ -138,12 +126,16 @@ def prepare_amem_dataset(
                 question=str(entry.get("q", "")).strip(),
                 answer=entry.get("answer"),
                 category=int(entry.get("category", -1)),
-                speaker_1_name=str(speaker_1.get("name", "speaker_1")),
+                speaker_1_name=speaker_1_name,
                 speaker_1_memories=speaker_1_memories,
-                speaker_1_search_time=float(speaker_1.get("search_time", 0.0) or 0.0),
-                speaker_2_name=str(speaker_2.get("name", "speaker_2")),
+                speaker_1_search_time=float(search_time.get("speaker_1", 0.0) or 0.0)
+                if isinstance(search_time, dict)
+                else 0.0,
+                speaker_2_name=speaker_2_name,
                 speaker_2_memories=speaker_2_memories,
-                speaker_2_search_time=float(speaker_2.get("search_time", 0.0) or 0.0),
+                speaker_2_search_time=float(search_time.get("speaker_2", 0.0) or 0.0)
+                if isinstance(search_time, dict)
+                else 0.0,
             )
             prepared_rows.append(prepared)
             existing_map[entry_key(prepared)] = prepared

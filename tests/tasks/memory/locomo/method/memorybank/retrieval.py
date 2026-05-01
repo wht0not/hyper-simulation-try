@@ -1,21 +1,14 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from pathlib import Path
 from typing import Any
 
 import numpy as np
-from langchain_ollama import ChatOllama
 from tqdm import tqdm
 
-from prompt.memorybank import (
-    build_memorybank_overall_history_prompt,
-    build_memorybank_overall_personality_prompt,
-    build_memorybank_personality_summary_prompt,
-    build_memorybank_session_summary_prompt,
-)
+from .memory import build_memorybank_memory_dataset, load_memorybank_memory_payload
 from utils.utils import (
     coerce_category,
     entry_key,
@@ -26,74 +19,6 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
-
-
-def _memory_cache_file(output_dir: str, sample_id: str) -> Path:
-    return Path(output_dir) / "memory" / f"{sample_id}.json"
-
-
-def _conversation_digest(chat_history: list[dict[str, Any]]) -> str:
-    payload = json.dumps(chat_history, ensure_ascii=False, sort_keys=True)
-    return hashlib.md5(payload.encode("utf-8")).hexdigest()
-
-
-def _question_cache_key(qa_id: str, question: str) -> str:
-    return f"{qa_id}::{question}"
-
-
-def _load_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-) -> dict[str, Any]:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    if not cache_file.exists():
-        return {}
-    try:
-        payload = json.loads(cache_file.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    if not isinstance(payload, dict):
-        return {}
-    meta = payload.get("meta", {})
-    if not isinstance(meta, dict):
-        return {}
-    if meta.get("conversation_digest") != _conversation_digest(chat_history):
-        return {}
-    if str(meta.get("model_name", "")) != str(model_name):
-        return {}
-    return payload
-
-
-def _save_sample_memory_cache(
-    output_dir: str,
-    sample_id: str,
-    chat_history: list[dict[str, Any]],
-    model_name: str,
-    summary_rows: list[dict[str, Any]],
-    personality_rows: list[dict[str, Any]],
-    overall_history: str,
-    overall_personality: str,
-    question_cache: dict[str, Any],
-) -> None:
-    cache_file = _memory_cache_file(output_dir, sample_id)
-    payload = {
-        "meta": {
-            "method": "memorybank",
-            "sample_id": sample_id,
-            "model_name": model_name,
-            "conversation_digest": _conversation_digest(chat_history),
-        },
-        "memory_payload": {
-            "summary_by_date": summary_rows,
-            "personality_by_date": personality_rows,
-            "overall_history": overall_history,
-            "overall_personality": overall_personality,
-        },
-        "question_cache": question_cache,
-    }
-    safe_write_json(cache_file, payload)
 
 
 def _iter_memorybank_samples(payload: Any) -> list[tuple[str, dict[str, Any]]]:
@@ -148,54 +73,6 @@ def _retrieved_payload(
     return {"summary": summary, "entries": rows}
 
 
-def _ordered_speakers(chat_history: list[dict[str, Any]]) -> list[str]:
-    speakers: list[str] = []
-    for turn in chat_history:
-        if not isinstance(turn, dict):
-            continue
-        speaker = str(turn.get("speaker", "")).strip()
-        if speaker and speaker not in speakers:
-            speakers.append(speaker)
-    return speakers
-
-
-def _group_turns_by_date(chat_history: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    order: list[str] = []
-    for turn in chat_history:
-        if not isinstance(turn, dict):
-            continue
-        timestamp = str(turn.get("timestamp", turn.get("date_time", ""))).strip() or "unknown_date"
-        if timestamp not in grouped:
-            grouped[timestamp] = []
-            order.append(timestamp)
-        grouped[timestamp].append(turn)
-    return [(date, grouped[date]) for date in order]
-
-
-def _session_dialogue_text(turns: list[dict[str, Any]], user_name: str, ai_name: str) -> str:
-    lines: list[str] = []
-    for turn in turns:
-        speaker = str(turn.get("speaker", "")).strip()
-        text = str(turn.get("text", "")).strip()
-        if not text:
-            continue
-        speaker_name = user_name if speaker == user_name else ai_name if speaker == ai_name else speaker or "Unknown"
-        lines.append(f"{speaker_name}: {text}")
-    return "\n".join(lines).strip()
-
-
-def _call_text_llm(model: ChatOllama, prompt: str, temperature: float = 0.1) -> str:
-    try:
-        response = model.invoke(prompt, temperature=temperature)
-        return str(getattr(response, "content", response) or "").strip()
-    except TypeError:
-        response = ChatOllama(model=model.model, temperature=temperature, reasoning=False, num_predict=4096).invoke(prompt)
-        return str(getattr(response, "content", response) or "").strip()
-    except Exception:
-        return ""
-
-
 def _embed_texts(texts: list[str]) -> np.ndarray:
     from hyper_simulation.component.embedding import get_embedding_batch
 
@@ -247,7 +124,12 @@ def retrieve_memorybank_dataset(
     if limit is not None and limit > 0:
         samples = samples[:limit]
 
-    llm = ChatOllama(model=model_name, temperature=0.1, reasoning=False, num_predict=4096)
+    build_memorybank_memory_dataset(
+        dataset_path=dataset_path,
+        output_dir=output_dir,
+        model_name=model_name,
+        limit=limit,
+    )
     total_questions = count_memorybank_questions(dataset_file, limit=limit)
     existing_map = load_existing_result_map(out_file)
     retrieved_rows = load_existing_results(out_file)
@@ -276,27 +158,10 @@ def retrieve_memorybank_dataset(
             if not pending_questions:
                 continue
 
-            speakers = _ordered_speakers(chat_history)
-            if len(speakers) != 2:
-                for _ in pending_questions:
-                    pbar.update(1)
-                continue
-            user_name, ai_name = speakers[0], speakers[1]
-
-            dated_turns = _group_turns_by_date(chat_history)
-            cache_payload = _load_sample_memory_cache(
-                output_dir=output_dir,
-                sample_id=sample_id,
-                chat_history=chat_history,
-                model_name=model_name,
-            )
+            cache_payload = load_memorybank_memory_payload(output_dir=output_dir, sample_id=sample_id)
             memory_payload = cache_payload.get("memory_payload", {}) if isinstance(cache_payload, dict) else {}
-            question_cache = cache_payload.get("question_cache", {}) if isinstance(cache_payload, dict) else {}
             if not isinstance(memory_payload, dict):
                 memory_payload = {}
-            if not isinstance(question_cache, dict):
-                question_cache = {}
-            cache_dirty = False
 
             summary_rows = memory_payload.get("summary_by_date", [])
             personality_rows = memory_payload.get("personality_by_date", [])
@@ -306,75 +171,8 @@ def retrieve_memorybank_dataset(
                 summary_rows = []
             if not isinstance(personality_rows, list):
                 personality_rows = []
-
-            has_memory_payload = bool(summary_rows) and bool(personality_rows)
-            if not has_memory_payload:
-                summary_rows = []
-                personality_rows = []
-                memory_pbar = (
-                    tqdm(
-                        total=len(dated_turns) * 2,
-                        desc=f"locomo/memory/memorybank/{sample_id}",
-                        unit="step",
-                        leave=False,
-                    )
-                    if dated_turns
-                    else None
-                )
-                try:
-                    for date, turns in dated_turns:
-                        dialogue_text = _session_dialogue_text(turns, user_name=user_name, ai_name=ai_name)
-                        if not dialogue_text:
-                            if memory_pbar is not None:
-                                memory_pbar.update(2)
-                            continue
-                        session_summary = _call_text_llm(llm, build_memorybank_session_summary_prompt(dialogue_text))
-                        if memory_pbar is not None:
-                            memory_pbar.update(1)
-                        personality_summary = _call_text_llm(
-                            llm,
-                            build_memorybank_personality_summary_prompt(dialogue_text, user_name=user_name),
-                        )
-                        if memory_pbar is not None:
-                            memory_pbar.update(1)
-                        summary_rows.append(
-                            {
-                                "date": date,
-                                "content": session_summary or dialogue_text,
-                                "raw_dialogue": dialogue_text,
-                            }
-                        )
-                        personality_rows.append(
-                            {
-                                "date": date,
-                                "content": personality_summary,
-                            }
-                        )
-                finally:
-                    if memory_pbar is not None:
-                        memory_pbar.close()
-
-                dated_summaries = "\n".join(
-                    f"At {row['date']}, the events are {row['content']}"
-                    for row in summary_rows
-                    if str(row.get("content", "")).strip()
-                )
-                dated_personality = "\n".join(
-                    f"At {row['date']}, the analysis shows {row['content']}"
-                    for row in personality_rows
-                    if str(row.get("content", "")).strip()
-                )
-                overall_history = (
-                    _call_text_llm(llm, build_memorybank_overall_history_prompt(dated_summaries))
-                    if dated_summaries
-                    else ""
-                )
-                overall_personality = (
-                    _call_text_llm(llm, build_memorybank_overall_personality_prompt(dated_personality))
-                    if dated_personality
-                    else ""
-                )
-                cache_dirty = True
+            user_name = str(cache_payload.get("metadata", {}).get("user_name", sample.get("conversation", [{}])[0].get("speaker", "User")))
+            ai_name = str(cache_payload.get("metadata", {}).get("ai_name", "Assistant"))
 
             for qa_idx, question_item in enumerate(valid_questions):
                 question = str(question_item.get("question", "")).strip()
@@ -387,28 +185,10 @@ def retrieve_memorybank_dataset(
                     pbar.update(1)
                     continue
 
-                cache_key = _question_cache_key(qa_id, question)
-                cached_item = question_cache.get(cache_key)
-                if isinstance(cached_item, dict):
-                    d_list = cached_item.get("d", [])
-                    retrieval_time = float(cached_item.get("retrieval_time", 0.0) or 0.0)
-                    if not isinstance(d_list, list):
-                        d_list = []
-                    d_list = [str(item) for item in d_list]
-                else:
-                    retrieve_started_at = time.perf_counter()
-                    top_summary_rows = _top_k_summaries(question, summary_rows, top_k=3)
-                    retrieval_time = round(time.perf_counter() - retrieve_started_at, 4)
-                    d_list = [
-                        f"Date: {row['date']}\nSummary: {row['content']}\nDialogue: {row['raw_dialogue']}"
-                        for row in top_summary_rows
-                    ]
-                    question_cache[cache_key] = {
-                        "d": d_list,
-                        "retrieval_time": retrieval_time,
-                    }
-                    cache_dirty = True
-                related_memory = "\n\n".join(d_list).strip()
+                retrieve_started_at = time.perf_counter()
+                top_summary_rows = _top_k_summaries(question, summary_rows, top_k=3)
+                retrieval_time = round(time.perf_counter() - retrieve_started_at, 4)
+                d_list = [f"Date: {row['date']}\nSummary: {row['content']}" for row in top_summary_rows]
 
                 row = {
                     "sample_id": sample_id,
@@ -418,14 +198,11 @@ def retrieve_memorybank_dataset(
                     "category": coerce_category(question_item.get("category")),
                     "method": "memorybank",
                     "d": d_list,
-                    "memorybank_memory": {
+                    "memorybank_context": {
                         "user_name": user_name,
                         "ai_name": ai_name,
                         "overall_history": overall_history,
                         "overall_personality": overall_personality,
-                        "related_memory": related_memory,
-                        "summary_by_date": summary_rows,
-                        "personality_by_date": personality_rows,
                         "search_time": retrieval_time,
                     },
                 }
@@ -442,18 +219,6 @@ def retrieve_memorybank_dataset(
                     ),
                 )
                 pbar.update(1)
-            if cache_dirty:
-                _save_sample_memory_cache(
-                    output_dir=output_dir,
-                    sample_id=sample_id,
-                    chat_history=chat_history,
-                    model_name=model_name,
-                    summary_rows=summary_rows,
-                    personality_rows=personality_rows,
-                    overall_history=overall_history,
-                    overall_personality=overall_personality,
-                    question_cache=question_cache,
-                )
     finally:
         pbar.close()
 

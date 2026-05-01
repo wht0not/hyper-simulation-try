@@ -22,7 +22,7 @@ FORCE_REBUILD="${FORCE_REBUILD:-0}"
 
 # 控制阶段
 RUN_BASE_ALL="${RUN_BASE_ALL:-1}"
-RUN_HYPER_FROM_RETRIEVAL="${RUN_HYPER_FROM_RETRIEVAL:-1}"
+RUN_HYPER_FROM_RETRIEVAL="${RUN_HYPER_FROM_RETRIEVAL:-0}"
 
 run_simulation_pipeline() {
   pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" "$@"
@@ -88,29 +88,29 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
 
-  echo "[A2] langmem all -> data/langmem"
-  run_simulation_pipeline \
-    --method langmem \
-    --stage all \
-    --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
-    --output-dir "$DATA_ROOT/langmem" \
-    --model-name "$MODEL_NAME" \
-    --answer-batch-size "$ANSWER_BATCH_SIZE" \
-    --judge-max-workers "$JUDGE_MAX_WORKERS" \
-    --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-    --limit "$LIMIT"
+  # echo "[A2] langmem all -> data/langmem"
+  # run_simulation_pipeline \
+  #   --method langmem \
+  #   --stage all \
+  #   --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
+  #   --output-dir "$DATA_ROOT/langmem" \
+  #   --model-name "$MODEL_NAME" \
+  #   --answer-batch-size "$ANSWER_BATCH_SIZE" \
+  #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
+  #   --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+  #   --limit "$LIMIT"
 
-  echo "[A3] amem all -> data/amem"
-  run_simulation_pipeline \
-    --method amem \
-    --stage all \
-    --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
-    --output-dir "$DATA_ROOT/amem" \
-    --model-name "$MODEL_NAME" \
-    --answer-batch-size "$ANSWER_BATCH_SIZE" \
-    --judge-max-workers "$JUDGE_MAX_WORKERS" \
-    --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-    --limit "$LIMIT"
+  # echo "[A3] amem all -> data/amem"
+  # run_simulation_pipeline \
+  #   --method amem \
+  #   --stage all \
+  #   --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
+  #   --output-dir "$DATA_ROOT/amem" \
+  #   --model-name "$MODEL_NAME" \
+  #   --answer-batch-size "$ANSWER_BATCH_SIZE" \
+  #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
+  #   --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+  #   --limit "$LIMIT"
 
   echo "[A4] memorybank all -> data/memorybank"
   run_simulation_pipeline \
@@ -123,34 +123,8 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --judge-max-workers "$JUDGE_MAX_WORKERS" \
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
-
-  echo "[A5] rag existing retrieved -> context all (resume-aware)"
-  shopt -s nullglob
-  rag_dirs=( "$DATA_ROOT"/rag/*_* )
-  shopt -u nullglob
-  for rag_output_dir in "${rag_dirs[@]}"; do
-    if [[ ! -d "$rag_output_dir" ]]; then
-      continue
-    fi
-    rag_dataset="$rag_output_dir/locomo10_rag.json"
-    if [[ ! -f "$rag_dataset" ]]; then
-      echo "[A5] skip $rag_output_dir (missing retrieved dataset locomo10_rag.json)"
-      continue
-    fi
-    echo "[A5] context all for rag dir: $rag_output_dir"
-    run_simulation_pipeline \
-      --method context \
-      --stage all \
-      --dataset-path "$rag_dataset" \
-      --output-dir "$rag_output_dir" \
-      --model-name "$MODEL_NAME" \
-      --answer-batch-size "$ANSWER_BATCH_SIZE" \
-      --judge-max-workers "$JUDGE_MAX_WORKERS" \
-      --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-      --limit "$LIMIT"
-  done
-
-  echo "[A6] hyper_simulation baseline all -> data/hyper_simulation"
+  
+  echo "[A5] hyper_simulation baseline all -> data/hyper_simulation"
   context_instances="$HYPERGRAPH_ROOT/locomo_context"
   run_hypergraph_build \
     --method hyper_simulation \
@@ -171,6 +145,33 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --judge-max-workers "$JUDGE_MAX_WORKERS" \
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
+
+  echo "[A6] rag existing retrieved -> context all (resume-aware)"
+  shopt -s nullglob
+  rag_dirs=( "$DATA_ROOT"/rag/*_* )
+  shopt -u nullglob
+  for rag_output_dir in "${rag_dirs[@]}"; do
+    if [[ ! -d "$rag_output_dir" ]]; then
+      continue
+    fi
+    rag_dataset="$rag_output_dir/locomo10_rag.json"
+    if [[ ! -f "$rag_dataset" ]]; then
+      echo "[A5] skip $rag_output_dir (missing retrieved dataset locomo10_rag.json)"
+      continue
+    fi
+    echo "[A6] context all for rag dir: $rag_output_dir"
+    run_simulation_pipeline \
+      --method context \
+      --stage all \
+      --dataset-path "$rag_dataset" \
+      --output-dir "$rag_output_dir" \
+      --model-name "$MODEL_NAME" \
+      --answer-batch-size "$ANSWER_BATCH_SIZE" \
+      --judge-max-workers "$JUDGE_MAX_WORKERS" \
+      --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+      --limit "$LIMIT"
+  done
+
 fi
 
 if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then

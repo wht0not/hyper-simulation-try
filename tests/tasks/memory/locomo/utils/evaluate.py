@@ -170,26 +170,6 @@ def evaluate_single_row(
             }
     return out_row
 
-
-def _metrics_sidecar(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "summary": payload["summary"],
-        "results": [
-            {
-                "sample_id": row.get("sample_id"),
-                "qa_id": row.get("qa_id"),
-                "q": row.get("q"),
-                "category": row.get("category"),
-                "answer": row.get("answer"),
-                "prediction": row.get("prediction"),
-                "metrics": row.get("metrics", {}),
-            }
-            for row in payload.get("results", [])
-            if isinstance(row, dict)
-        ],
-    }
-
-
 def _materialize_rows(row_order: list[str], row_map: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     return [
         row_map[key]
@@ -288,7 +268,6 @@ def evaluate_results_file(
                 "results": evaluated_rows,
             }
             safe_write_json(output_file, evaluated_payload)
-            safe_write_json(output_file.with_name(output_file.stem + "_metrics.json"), _metrics_sidecar(evaluated_payload))
 
     evaluated_rows = _materialize_rows(row_order, evaluated_map)
     evaluated_payload = {
@@ -302,5 +281,4 @@ def evaluate_results_file(
         "results": evaluated_rows,
     }
     safe_write_json(output_file, evaluated_payload)
-    safe_write_json(output_file.with_name(output_file.stem + "_metrics.json"), _metrics_sidecar(evaluated_payload))
     return evaluated_payload
