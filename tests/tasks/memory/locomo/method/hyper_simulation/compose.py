@@ -34,6 +34,19 @@ LEGACY_HYPERSIM_FIELDS = {
     "slice_hit_counts",
     "slice_critical_hit_counts",
 }
+QUERY_DIRNAME = "query"
+
+
+def locomo_root_from_instances_root(instances_root: str | Path) -> Path:
+    path = Path(instances_root)
+    for candidate in (path, *path.parents):
+        if candidate.name == "locomo":
+            return candidate
+    raise ValueError(f"instances_root must be under locomo directory: {path}")
+
+
+def shared_query_output_dir(instances_root: str | Path) -> Path:
+    return locomo_root_from_instances_root(instances_root) / QUERY_DIRNAME
 
 
 def _prepared_payload(
@@ -86,8 +99,8 @@ def _sorted_index_from_name(path: Path) -> int:
     return int(match_obj.group(1))
 
 
-def _load_query_hypergraph(instance_dir: Path, qa_id: str) -> LocalHypergraph | None:
-    query_path = instance_dir / f"query_hypergraph_{qa_id}.pkl"
+def _load_query_hypergraph(instances_root: Path, qa_id: str) -> LocalHypergraph | None:
+    query_path = shared_query_output_dir(instances_root) / f"query_hypergraph_{qa_id}.pkl"
     if not query_path.exists():
         return None
     try:
@@ -241,7 +254,7 @@ def _build_context_block(
     return "\n\n".join(rendered_slices), ranked_slice_summary
 
 
-def compose_hypersim_instance(instance_dir: Path, existing_map: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
+def compose_hypersim_instance(instances_root: Path, instance_dir: Path, existing_map: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     existing_map = existing_map or {}
     meta_path = instance_dir / "metadata.json"
     if not meta_path.exists():
@@ -268,7 +281,7 @@ def compose_hypersim_instance(instance_dir: Path, existing_map: dict[str, dict[s
         row_stub = {"sample_id": sample_id, "qa_id": qa_id, "q": q}
         if existing_map.get(entry_key(row_stub)) is not None:
             continue
-        query_hg = _load_query_hypergraph(instance_dir, qa_id)
+        query_hg = _load_query_hypergraph(instances_root, qa_id)
         if query_hg is None:
             continue
         try:
@@ -345,7 +358,7 @@ def prepare_hypersim_instances(instances_root: str, output_dir: str, limit: int 
         dirs = dirs[:limit]
     prepared_rows = list(existing_rows)
     for instance_dir in tqdm(dirs, desc="locomo/compose/hyper_simulation", unit="inst"):
-        for prepared in compose_hypersim_instance(instance_dir, existing_map=existing_map):
+        for prepared in compose_hypersim_instance(instances_dir, instance_dir, existing_map=existing_map):
             prepared_rows.append(prepared)
             existing_map[entry_key(prepared)] = prepared
             safe_write_json(

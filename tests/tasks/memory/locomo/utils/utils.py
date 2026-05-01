@@ -9,7 +9,7 @@ DEFAULT_DATASET_PATHS = [
     "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/context/locomo_context.json",
 ]
 DEFAULT_OUTPUT_DIR = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data"
-DEFAULT_INSTANCES_ROOT = "/home/vincent/hyper-simulation-try/data/hypergraphs/locomo_context"
+DEFAULT_INSTANCES_ROOT = "/home/vincent/hyper-simulation-try/data/hypergraphs/locomo/context"
 DEFAULT_RAG_SOURCE_PATH = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/rag/locomo10_rag.json"
 DEFAULT_LANGMEM_DATASET_PATH = "/home/vincent/hyper-simulation-try/tests/tasks/memory/locomo/data/langmem/locomo10_rag.json"
 DEFAULT_MODEL_NAME = "qwen3.5:9b"

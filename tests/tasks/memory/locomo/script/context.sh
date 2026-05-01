@@ -5,7 +5,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCOMO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 LOCOMO_DATA="$LOCOMO_ROOT/data/context"
-CONTEXT_DATASET="$LOCOMO_ROOT/data/context/locomo_context_raw.json"
+CONTEXT_DATASET="$LOCOMO_ROOT/data/context/locomo_context.json"
 
 ANSWER_BATCH_SIZE="${ANSWER_BATCH_SIZE:-5}"
 JUDGE_MAX_WORKERS="${JUDGE_MAX_WORKERS:-4}"
@@ -31,12 +31,12 @@ pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 #   --method context \
 #   --stage answer \
-#   --prepared-path "$LOCOMO_DATA/locomo_context_raw_prepared.json" \
+#   --prepared-path "$LOCOMO_DATA/prepared.json" \
 #   --answer-batch-size "$ANSWER_BATCH_SIZE"
 #
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 #   --method context \
 #   --stage evaluate \
-#   --answers-path "$LOCOMO_DATA/locomo_context_raw_answers.json" \
+#   --answers-path "$LOCOMO_DATA/answers.json" \
 #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
 #   --llm-judge-repeat "$LLM_JUDGE_REPEAT"

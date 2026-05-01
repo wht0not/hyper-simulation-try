@@ -34,21 +34,21 @@ pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 #   --method memorybank \
 #   --stage compose \
-#   --dataset-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_retrieved.json" \
+#   --dataset-path "$LOCOMO_DATA/retrieved.json" \
 #   --output-dir "$LOCOMO_DATA" \
 #   --model-name "$MODEL_NAME"
 #
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 #   --method memorybank \
 #   --stage answer \
-#   --prepared-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_prepared.json" \
+#   --prepared-path "$LOCOMO_DATA/prepared.json" \
 #   --model-name "$MODEL_NAME" \
 #   --answer-batch-size "$ANSWER_BATCH_SIZE"
 #
 # pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" \
 #   --method memorybank \
 #   --stage evaluate \
-#   --answers-path "$LOCOMO_DATA/locomo_memorybank_locomo10_rag_answers.json" \
+#   --answers-path "$LOCOMO_DATA/answers.json" \
 #   --model-name "$MODEL_NAME" \
 #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
 #   --llm-judge-repeat "$LLM_JUDGE_REPEAT"

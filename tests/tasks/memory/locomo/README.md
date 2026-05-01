@@ -25,12 +25,12 @@
 LOCOMO_ROOT=.
 PROJECT_ROOT=../../../..
 LOCOMO_DATA=./data
-CONTEXT_DATASET=./data/context/locomo_context_raw.json
+CONTEXT_DATASET=./data/context/locomo_context.json
 LANGMEM_DATASET=./data/langmem/locomo10_rag.json
-INSTANCES_CONTEXT="$PROJECT_ROOT/data/hypergraphs/locomo_context"
+INSTANCES_CONTEXT="$PROJECT_ROOT/data/hypergraphs/locomo/context"
 RAG_SOURCE=./data/rag/locomo10_rag.json
 RAG_DATASET=./data/rag/5_128/locomo10_rag.json
-RAG_INSTANCES="$PROJECT_ROOT/data/hypergraphs/locomo-rag-5_128"
+RAG_INSTANCES="$PROJECT_ROOT/data/hypergraphs/locomo/rag/5_128"
 ```
 
 优先使用 `script/` 目录下按方法拆分的脚本：
@@ -71,8 +71,9 @@ pixi run -e simulation python ./run_experiments.py \
   --llm-judge-repeat 5
 ```
 
-### hyper\_simulation
+### hyper\_simulation / context
 
+- 这条 baseline 实际上是 `context + hyper_simulation`。
 - 如果 hypergraph 已经建好，`all` 只需要 `instances-root`：
 
 ```bash
@@ -80,7 +81,7 @@ pixi run -e simulation python ./run_experiments.py \
   --method hyper_simulation \
   --stage all \
   --instances-root "$INSTANCES_CONTEXT" \
-  --output-dir "$LOCOMO_DATA" \
+  --output-dir "$LOCOMO_DATA/hyper_simulation/context" \
   --answer-batch-size 5 \
   --judge-max-workers 4 \
   --llm-judge-repeat 5
@@ -135,7 +136,7 @@ pixi run -e simulation python ./run_experiments.py \
   --method hyper_simulation \
   --stage all \
   --instances-root "$RAG_INSTANCES" \
-  --output-dir "$LOCOMO_DATA"
+  --output-dir "$LOCOMO_DATA/hyper_simulation/rag/5_128"
 ```
 
 ### langmem
@@ -179,12 +180,12 @@ prepared 里除了兼容通用流水线的 `d` 字段，还会额外保留 `spea
 
 ```bash
 pixi run -e hypergraph python ./run_experiments.py --method hyper_simulation --stage build --dataset-path "$CONTEXT_DATASET" --instances-root "$INSTANCES_CONTEXT"
-pixi run -e simulation python ./run_experiments.py --method context --stage compose --dataset-path "$CONTEXT_DATASET" --output-dir "$LOCOMO_DATA"
-pixi run -e simulation python ./run_experiments.py --method context --stage answer --prepared-path "$LOCOMO_DATA/locomo_context_raw_prepared.json"
-pixi run -e simulation python ./run_experiments.py --method context --stage evaluate --answers-path "$LOCOMO_DATA/locomo_context_raw_answers.json"
-pixi run -e simulation python ./run_experiments.py --method langmem --stage compose --dataset-path "$LANGMEM_DATASET" --output-dir "$LOCOMO_DATA" --model-name qwen3.5:9b
-pixi run -e simulation python ./run_experiments.py --method langmem --stage answer --prepared-path "$LOCOMO_DATA/locomo_langmem_locomo10_rag_prepared.json" --model-name qwen3.5:9b
-pixi run -e simulation python ./run_experiments.py --method langmem --stage evaluate --answers-path "$LOCOMO_DATA/locomo_langmem_locomo10_rag_answers.json" --judge-max-workers 4 --llm-judge-repeat 5
+pixi run -e simulation python ./run_experiments.py --method hyper_simulation --stage compose --instances-root "$INSTANCES_CONTEXT" --output-dir "$LOCOMO_DATA/hyper_simulation/context"
+pixi run -e simulation python ./run_experiments.py --method hyper_simulation --stage answer --prepared-path "$LOCOMO_DATA/hyper_simulation/context/prepared.json"
+pixi run -e simulation python ./run_experiments.py --method hyper_simulation --stage evaluate --answers-path "$LOCOMO_DATA/hyper_simulation/context/answers.json"
+pixi run -e simulation python ./run_experiments.py --method langmem --stage compose --dataset-path "$LANGMEM_DATASET" --output-dir "$LOCOMO_DATA/langmem" --model-name qwen3.5:9b
+pixi run -e simulation python ./run_experiments.py --method langmem --stage answer --prepared-path "$LOCOMO_DATA/langmem/prepared.json" --model-name qwen3.5:9b
+pixi run -e simulation python ./run_experiments.py --method langmem --stage evaluate --answers-path "$LOCOMO_DATA/langmem/answers.json" --judge-max-workers 4 --llm-judge-repeat 5
 ```
 
 ## 推荐参数

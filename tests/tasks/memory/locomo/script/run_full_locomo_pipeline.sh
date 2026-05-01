@@ -124,8 +124,8 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
   
-  echo "[A5] hyper_simulation baseline all -> data/hyper_simulation"
-  context_instances="$HYPERGRAPH_ROOT/locomo_context"
+  echo "[A5] context + hyper_simulation baseline all -> data/hyper_simulation/context"
+  context_instances="$HYPERGRAPH_ROOT/locomo/context"
   run_hypergraph_build \
     --method hyper_simulation \
     --stage build \
@@ -139,7 +139,7 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --method hyper_simulation \
     --stage all \
     --instances-root "$context_instances" \
-    --output-dir "$DATA_ROOT/hyper_simulation" \
+    --output-dir "$DATA_ROOT/hyper_simulation/context" \
     --model-name "$MODEL_NAME" \
     --answer-batch-size "$ANSWER_BATCH_SIZE" \
     --judge-max-workers "$JUDGE_MAX_WORKERS" \
@@ -181,7 +181,7 @@ if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then
     echo "[B] ${method} retrieved -> hypergraph -> hypersim all"
     method_output_dir="$DATA_ROOT/$method"
     retrieved_file="$(ensure_retrieved_file "$method" "$method_output_dir" "$RETRIEVAL_SOURCE_DATASET")" || continue
-    method_instances="$HYPERGRAPH_ROOT/$method"
+    method_instances="$HYPERGRAPH_ROOT/locomo/$method"
     run_hypergraph_build \
       --method hyper_simulation \
       --stage build \
@@ -195,7 +195,7 @@ if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then
       --method hyper_simulation \
       --stage all \
       --instances-root "$method_instances" \
-      --output-dir "$DATA_ROOT/hyper_simulation/method/$method" \
+      --output-dir "$DATA_ROOT/hyper_simulation/$method" \
       --model-name "$MODEL_NAME" \
       --answer-batch-size "$ANSWER_BATCH_SIZE" \
       --judge-max-workers "$JUDGE_MAX_WORKERS" \
@@ -217,8 +217,8 @@ if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then
       continue
     fi
     combo_name="$(basename "$rag_dir")"
-    rag_instances="$HYPERGRAPH_ROOT/rag/$combo_name"
-    rag_hypersim_output="$DATA_ROOT/hyper_simulation/method/rag/$combo_name"
+    rag_instances="$HYPERGRAPH_ROOT/locomo/rag/$combo_name"
+    rag_hypersim_output="$DATA_ROOT/hyper_simulation/rag/$combo_name"
 
     run_hypergraph_build \
       --method hyper_simulation \

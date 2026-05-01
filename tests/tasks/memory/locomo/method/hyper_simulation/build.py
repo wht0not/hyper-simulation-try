@@ -6,8 +6,9 @@ Supported input schema:
   (also 16K/32K)
 
 Output layout:
-  tests/tasks/memory/locomo/instances/<instance_id>/
-    - query_hypergraph.pkl
+  data/hypergraphs/locomo/query/
+    - query_hypergraph_<qa_id>.pkl
+  data/hypergraphs/locomo/<source>/<instance_id>/
     - data_hypergraph0.pkl (session 1)
     - data_hypergraph1.pkl (session 2)
     - metadata.json
@@ -33,6 +34,20 @@ from hyper_simulation.component.build_hypergraph import (
 
 logger = logging.getLogger(__name__)
 local_model_path = "/home/vincent/.cache/huggingface/hub/models--biu-nlp--lingmess-coref/snapshots/fa5d8a827a09388d03adbe9e800c7d8c509c3935"
+METHOD_NAME = "hyper_simulation"
+QUERY_DIRNAME = "query"
+
+
+def locomo_root_from_instances_root(instances_root: str | Path) -> Path:
+    instances_root_path = Path(instances_root)
+    for candidate in (instances_root_path, *instances_root_path.parents):
+        if candidate.name == "locomo":
+            return candidate
+    raise ValueError(f"instances_root must be under a 'locomo' directory: {instances_root_path}")
+
+
+def shared_query_output_dir(instances_root: str | Path) -> Path:
+    return locomo_root_from_instances_root(instances_root) / QUERY_DIRNAME
 
 
 def load_entries_for_build(dataset_path: str | Path) -> tuple[Path, list[dict[str, Any]]]:
@@ -131,7 +146,8 @@ def batch_text_to_hypergraph(
 
 def _prepare_tasks(
     entries: list[dict],
-    output_dir: Path,
+    instances_root: Path,
+    query_output_dir: Path,
     force_rebuild: bool = False,
 ) -> tuple[list[tuple[Path, str, str]], list[tuple[Path, int, str]]]:
     tasks_query: list[tuple[Path, str, str]] = []
@@ -151,7 +167,7 @@ def _prepare_tasks(
             continue
 
         instance_id = generate_instance_id(sample_id)
-        instance_dir = output_dir / instance_id
+        instance_dir = instances_root / instance_id
 
         if instance_id not in sample_metadata:
             sample_metadata[instance_id] = {
@@ -174,12 +190,12 @@ def _prepare_tasks(
             }
         )
 
-        if not force_rebuild and instance_dir.exists() and (instance_dir / f"query_hypergraph_{qa_id}.pkl").exists():
+        if not force_rebuild and (query_output_dir / f"query_hypergraph_{qa_id}.pkl").exists():
             continue
         tasks_query.append((instance_dir, qa_id, q))
 
     for instance_id, meta in sample_metadata.items():
-        instance_dir = output_dir / instance_id
+        instance_dir = instances_root / instance_id
         instance_dir.mkdir(parents=True, exist_ok=True)
         meta_path = instance_dir / "metadata.json"
         meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -190,12 +206,19 @@ def _prepare_tasks(
 def build_all_hypergraphs_gpu_batch(
     nlp: Language,
     entries: list[dict],
-    output_dir: Path,
+    instances_root: Path,
     batch_size: int = 16,
     force_rebuild: bool = False,
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tasks_query, tasks_data = _prepare_tasks(entries, output_dir, force_rebuild=force_rebuild)
+    instances_root.mkdir(parents=True, exist_ok=True)
+    query_output_dir = shared_query_output_dir(instances_root)
+    query_output_dir.mkdir(parents=True, exist_ok=True)
+    tasks_query, tasks_data = _prepare_tasks(
+        entries,
+        instances_root,
+        query_output_dir,
+        force_rebuild=force_rebuild,
+    )
 
     logger.info(f"Processing {len(tasks_query)} queries and {len(tasks_data)} data chunks in batch...")
 
@@ -210,9 +233,8 @@ def build_all_hypergraphs_gpu_batch(
         )
         for meta, hg in q_hgs_iter:
             if hg is not None:
-                instance_dir = meta["instance_dir"]
                 qa_id = meta["qa_id"]
-                hg.save(str(instance_dir / f"query_hypergraph_{qa_id}.pkl"))
+                hg.save(str(query_output_dir / f"query_hypergraph_{qa_id}.pkl"))
 
     # Process Data
     if tasks_data:
@@ -237,18 +259,25 @@ def build_all_hypergraphs_gpu_batch(
 
 def build_all_hypergraphs_single(
     entries: list[dict],
-    output_dir: Path,
+    instances_root: Path,
     force_rebuild: bool = False,
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    tasks_query, tasks_data = _prepare_tasks(entries, output_dir, force_rebuild=force_rebuild)
+    instances_root.mkdir(parents=True, exist_ok=True)
+    query_output_dir = shared_query_output_dir(instances_root)
+    query_output_dir.mkdir(parents=True, exist_ok=True)
+    tasks_query, tasks_data = _prepare_tasks(
+        entries,
+        instances_root,
+        query_output_dir,
+        force_rebuild=force_rebuild,
+    )
 
     logger.info(f"Processing {len(tasks_query)} queries and {len(tasks_data)} data chunks in single mode...")
 
     for instance_dir, qa_id, q in tqdm(tasks_query, desc="Building query hypergraphs"):
         try:
             hg = text_to_hypergraph(q, is_query=True)
-            hg.save(str(instance_dir / f"query_hypergraph_{qa_id}.pkl"))
+            hg.save(str(query_output_dir / f"query_hypergraph_{qa_id}.pkl"))
         except Exception as exc:
             logger.error("Failed query hypergraph for %s qa_id=%s: %s", instance_dir.name, qa_id, exc)
 
@@ -262,29 +291,30 @@ def build_all_hypergraphs_single(
 
 def build_hypergraphs_from_dataset(
     dataset_path: str | Path,
-    output_dir: str | Path,
+    instances_root: str | Path,
     batch_size: int = 128,
     force_rebuild: bool = False,
 ) -> dict[str, Any]:
     """Build hypergraphs from any generic LoCoMo entries dataset."""
     started_at = time.perf_counter()
     dataset_file, entries = load_entries_for_build(dataset_path)
-    out_dir = Path(output_dir)
+    instances_root_path = Path(instances_root)
     nlp = setup_gpu_nlp()
     build_all_hypergraphs_gpu_batch(
         nlp,
         entries,
-        out_dir,
+        instances_root_path,
         batch_size=batch_size,
         force_rebuild=force_rebuild,
     )
 
     return {
         "summary": {
-            "method": "hyper_simulation",
+            "method": METHOD_NAME,
             "stage": "build",
             "dataset_path": str(dataset_file),
-            "instances_root": str(out_dir),
+            "instances_root": str(instances_root_path),
+            "query_root": str(shared_query_output_dir(instances_root_path)),
             "use_gpu_batch": True,
             "batch_size": batch_size,
             "force_rebuild": force_rebuild,
@@ -297,14 +327,14 @@ def build_hypergraphs_from_dataset(
 def main():
     parser = ArgumentParser(description="Build Locomo Hypergraphs")
     parser.add_argument("--dataset", type=str, default="/home/vincent/hyper-simulation-try/data/bench/locomo-main/locomo-data/locomo_32K.json")
-    parser.add_argument("--output-dir", type=str, default="/home/vincent/hyper-simulation-try/data/hypergraphs/locomo")
+    parser.add_argument("--instances-root", type=str, default="/home/vincent/hyper-simulation-try/data/hypergraphs/locomo/context")
     parser.add_argument("--batch-size", type=int, default=128)
     parser.add_argument("--force-rebuild", action="store_true")
     args = parser.parse_args()
 
     build_hypergraphs_from_dataset(
         dataset_path=args.dataset,
-        output_dir=args.output_dir,
+        instances_root=args.instances_root,
         batch_size=args.batch_size,
         force_rebuild=args.force_rebuild,
     )
