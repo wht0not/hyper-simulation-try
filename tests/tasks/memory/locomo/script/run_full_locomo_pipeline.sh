@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOCOMO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
@@ -15,7 +15,7 @@ RETRIEVAL_SOURCE_DATASET="$LOCOMO_ROOT/data/locomo10_rag.json"
 MODEL_NAME="${MODEL_NAME:-qwen3.5:9b}"
 ANSWER_BATCH_SIZE="${ANSWER_BATCH_SIZE:-5}"
 JUDGE_MAX_WORKERS="${JUDGE_MAX_WORKERS:-4}"
-LLM_JUDGE_REPEAT="${LLM_JUDGE_REPEAT:-5}"
+LLM_JUDGE_REPEAT="${LLM_JUDGE_REPEAT:-1}"
 HYPERGRAPH_BATCH_SIZE="${HYPERGRAPH_BATCH_SIZE:-128}"
 LIMIT="${LIMIT:-0}"
 FORCE_REBUILD="${FORCE_REBUILD:-0}"
@@ -88,29 +88,29 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
 
-  # echo "[A2] langmem all -> data/langmem"
-  # run_simulation_pipeline \
-  #   --method langmem \
-  #   --stage all \
-  #   --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
-  #   --output-dir "$DATA_ROOT/langmem" \
-  #   --model-name "$MODEL_NAME" \
-  #   --answer-batch-size "$ANSWER_BATCH_SIZE" \
-  #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
-  #   --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-  #   --limit "$LIMIT"
+  echo "[A2] langmem all -> data/langmem"
+  run_simulation_pipeline \
+    --method langmem \
+    --stage all \
+    --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
+    --output-dir "$DATA_ROOT/langmem" \
+    --model-name "$MODEL_NAME" \
+    --answer-batch-size "$ANSWER_BATCH_SIZE" \
+    --judge-max-workers "$JUDGE_MAX_WORKERS" \
+    --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+    --limit "$LIMIT"
 
-  # echo "[A3] amem all -> data/amem"
-  # run_simulation_pipeline \
-  #   --method amem \
-  #   --stage all \
-  #   --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
-  #   --output-dir "$DATA_ROOT/amem" \
-  #   --model-name "$MODEL_NAME" \
-  #   --answer-batch-size "$ANSWER_BATCH_SIZE" \
-  #   --judge-max-workers "$JUDGE_MAX_WORKERS" \
-  #   --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-  #   --limit "$LIMIT"
+  echo "[A3] amem all -> data/amem"
+  run_simulation_pipeline \
+    --method amem \
+    --stage all \
+    --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
+    --output-dir "$DATA_ROOT/amem" \
+    --model-name "$MODEL_NAME" \
+    --answer-batch-size "$ANSWER_BATCH_SIZE" \
+    --judge-max-workers "$JUDGE_MAX_WORKERS" \
+    --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+    --limit "$LIMIT"
 
   echo "[A4] memorybank all -> data/memorybank"
   run_simulation_pipeline \
@@ -177,7 +177,7 @@ fi
 if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then
   echo "=== [B] retrieval -> hypergraph -> hyper_simulation(all) ==="
 # langmem amem
-  for method in memorybank; do
+  for method in memorybank langmem amem; do
     echo "[B] ${method} retrieved -> hypergraph -> hypersim all"
     method_output_dir="$DATA_ROOT/$method"
     retrieved_file="$(ensure_retrieved_file "$method" "$method_output_dir" "$RETRIEVAL_SOURCE_DATASET")" || continue

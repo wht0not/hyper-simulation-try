@@ -7,7 +7,7 @@ Supported input schema:
 
 Output layout:
   data/hypergraphs/locomo/query/
-    - query_hypergraph_<qa_id>.pkl
+    - <sha1(question)>.pkl
   data/hypergraphs/locomo/<source>/<instance_id>/
     - data_hypergraph0.pkl (session 1)
     - data_hypergraph1.pkl (session 2)
@@ -16,6 +16,7 @@ Output layout:
 
 import json
 import logging
+import hashlib
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -48,6 +49,11 @@ def locomo_root_from_instances_root(instances_root: str | Path) -> Path:
 
 def shared_query_output_dir(instances_root: str | Path) -> Path:
     return locomo_root_from_instances_root(instances_root) / QUERY_DIRNAME
+
+
+def query_key_from_question(question: str) -> str:
+    normalized = " ".join(str(question or "").strip().split())
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
 
 
 def load_entries_for_build(dataset_path: str | Path) -> tuple[Path, list[dict[str, Any]]]:
@@ -153,11 +159,13 @@ def _prepare_tasks(
     tasks_query: list[tuple[Path, str, str]] = []
     tasks_data: list[tuple[Path, int, str]] = []
     sample_metadata: dict[str, dict[str, Any]] = {}
+    seen_query_keys: set[str] = set()
 
     for entry in entries:
         sample_id = str(entry.get("sample_id", ""))
         qa_id = str(entry.get("qa_id", ""))
         q = str(entry.get("q", "")).strip()
+        query_key = query_key_from_question(q)
         d_list = entry.get("d", [])
         d_start = str(entry.get("d_start", "")).strip()
 
@@ -190,9 +198,12 @@ def _prepare_tasks(
             }
         )
 
-        if not force_rebuild and (query_output_dir / f"query_hypergraph_{qa_id}.pkl").exists():
+        if query_key in seen_query_keys:
             continue
-        tasks_query.append((instance_dir, qa_id, q))
+        if not force_rebuild and (query_output_dir / f"{query_key}.pkl").exists():
+            continue
+        seen_query_keys.add(query_key)
+        tasks_query.append((instance_dir, query_key, q))
 
     for instance_id, meta in sample_metadata.items():
         instance_dir = instances_root / instance_id
@@ -225,16 +236,16 @@ def build_all_hypergraphs_gpu_batch(
     # Process Queries
     if tasks_query:
         q_texts_with_meta = [
-            {"text": q, "meta": {"instance_dir": instance_dir, "qa_id": qa_id}}
-            for instance_dir, qa_id, q in tasks_query
+            {"text": q, "meta": {"instance_dir": instance_dir, "query_key": query_key}}
+            for instance_dir, query_key, q in tasks_query
         ]
         q_hgs_iter = batch_text_to_hypergraph(
             nlp, q_texts_with_meta, batch_size=batch_size, is_query=True
         )
         for meta, hg in q_hgs_iter:
             if hg is not None:
-                qa_id = meta["qa_id"]
-                hg.save(str(query_output_dir / f"query_hypergraph_{qa_id}.pkl"))
+                query_key = meta["query_key"]
+                hg.save(str(query_output_dir / f"{query_key}.pkl"))
 
     # Process Data
     if tasks_data:
@@ -274,12 +285,12 @@ def build_all_hypergraphs_single(
 
     logger.info(f"Processing {len(tasks_query)} queries and {len(tasks_data)} data chunks in single mode...")
 
-    for instance_dir, qa_id, q in tqdm(tasks_query, desc="Building query hypergraphs"):
+    for instance_dir, query_key, q in tqdm(tasks_query, desc="Building query hypergraphs"):
         try:
             hg = text_to_hypergraph(q, is_query=True)
-            hg.save(str(query_output_dir / f"query_hypergraph_{qa_id}.pkl"))
+            hg.save(str(query_output_dir / f"{query_key}.pkl"))
         except Exception as exc:
-            logger.error("Failed query hypergraph for %s qa_id=%s: %s", instance_dir.name, qa_id, exc)
+            logger.error("Failed query hypergraph for %s query_key=%s: %s", instance_dir.name, query_key, exc)
 
     for instance_dir, d_idx, d_text in tqdm(tasks_data, desc="Building data hypergraphs"):
         try:

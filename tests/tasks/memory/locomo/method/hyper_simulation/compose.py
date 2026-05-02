@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 from pathlib import Path
 import time
 from typing import Any
@@ -47,6 +48,11 @@ def locomo_root_from_instances_root(instances_root: str | Path) -> Path:
 
 def shared_query_output_dir(instances_root: str | Path) -> Path:
     return locomo_root_from_instances_root(instances_root) / QUERY_DIRNAME
+
+
+def query_key_from_question(question: str) -> str:
+    normalized = " ".join(str(question or "").strip().split())
+    return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
 
 
 def _prepared_payload(
@@ -99,8 +105,10 @@ def _sorted_index_from_name(path: Path) -> int:
     return int(match_obj.group(1))
 
 
-def _load_query_hypergraph(instances_root: Path, qa_id: str) -> LocalHypergraph | None:
-    query_path = shared_query_output_dir(instances_root) / f"query_hypergraph_{qa_id}.pkl"
+def _load_query_hypergraph(instances_root: Path, question: str) -> LocalHypergraph | None:
+    query_root = shared_query_output_dir(instances_root)
+    query_key = query_key_from_question(question)
+    query_path = query_root / f"{query_key}.pkl"
     if not query_path.exists():
         return None
     try:
@@ -281,7 +289,7 @@ def compose_hypersim_instance(instances_root: Path, instance_dir: Path, existing
         row_stub = {"sample_id": sample_id, "qa_id": qa_id, "q": q}
         if existing_map.get(entry_key(row_stub)) is not None:
             continue
-        query_hg = _load_query_hypergraph(instances_root, qa_id)
+        query_hg = _load_query_hypergraph(instances_root, question=q)
         if query_hg is None:
             continue
         try:
