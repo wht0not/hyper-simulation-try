@@ -12,12 +12,10 @@ from method.hyper_simulation.compose import sanitize_hypersim_row
 from hyper_simulation.utils.chat_completion import get_generate
 
 from .metrics import normalize_answer
-from .qa_utils import decode_cat5_choice
 from .utils import (
     DEFAULT_MODEL_NAME,
     DEFAULT_TEMPERATURE,
     answers_output_path,
-    coerce_category,
     entry_key,
     load_existing_result_map,
     load_existing_results,
@@ -94,6 +92,7 @@ def run_answers(
     temperature: float = DEFAULT_TEMPERATURE,
     limit: int | None = None,
     batch_size: int = 1,
+    checkpoint_every: int = 500,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     prepared_file = Path(prepared_path)
@@ -126,6 +125,8 @@ def run_answers(
         return cached
     results: list[dict[str, Any]] = load_existing_results(out_file)
     existing_map = load_existing_result_map(out_file)
+    checkpoint_every = max(1, int(checkpoint_every))
+    pending_writes = 0
     if method == "hyper_simulation":
         existing_map = {
             key: sanitize_hypersim_row(row) if isinstance(row, dict) else row
@@ -158,33 +159,39 @@ def run_answers(
             pending_prompts.append(prompt)
 
         raw_outputs: list[str] = []
+        infer_elapsed_seconds: list[float] = []
         if pending_prompts:
             try:
                 row_temperatures = [_resolve_row_temperature(row, temperature) for row in pending_rows]
                 unique_temperatures = {round(one, 4) for one in row_temperatures}
                 if len(unique_temperatures) == 1:
+                    infer_started_at = time.perf_counter()
                     raw_outputs = get_generate(pending_prompts, get_model(row_temperatures[0]))
+                    infer_total = max(0.0, time.perf_counter() - infer_started_at)
                     if len(raw_outputs) != len(pending_prompts):
                         raise ValueError(
                             f"batch output size mismatch: expected {len(pending_prompts)}, got {len(raw_outputs)}"
                         )
+                    avg_infer = infer_total / len(pending_prompts) if pending_prompts else 0.0
+                    infer_elapsed_seconds = [avg_infer] * len(pending_prompts)
                 else:
                     raw_outputs = []
+                    infer_elapsed_seconds = []
                     for row, prompt in zip(pending_rows, pending_prompts):
                         row_model = get_model(_resolve_row_temperature(row, temperature))
+                        infer_started_at = time.perf_counter()
                         response = row_model.invoke(prompt)
                         raw_outputs.append(str(getattr(response, "content", response) or ""))
+                        infer_elapsed_seconds.append(max(0.0, time.perf_counter() - infer_started_at))
             except Exception as exc:
                 tqdm.write(f"[ERROR][locomo/answer/{method}] batch_start={start_idx} err={type(exc).__name__}: {exc}")
                 raw_outputs = [""] * len(pending_prompts)
+                infer_elapsed_seconds = [0.0] * len(pending_prompts)
 
-        for row, raw in zip(pending_rows, raw_outputs):
+        for row, raw, infer_elapsed in zip(pending_rows, raw_outputs, infer_elapsed_seconds):
+            item_started_at = time.perf_counter()
             try:
-                category = coerce_category(row.get("category", -1))
-                if category == 5 and isinstance(row.get("cat5_answer_key"), dict):
-                    prediction = decode_cat5_choice(raw, row["cat5_answer_key"])
-                else:
-                    prediction = normalize_answer(raw)
+                prediction = normalize_answer(raw)
             except Exception as exc:
                 tqdm.write(
                     f"[ERROR][locomo/answer/{method}] sample_id={row.get('sample_id')} qa_id={row.get('qa_id')} err={type(exc).__name__}: {exc}"
@@ -199,20 +206,27 @@ def run_answers(
             }
             out_row["raw_prediction"] = raw
             out_row["prediction"] = prediction
+            out_row["answer_elapsed_seconds"] = round(
+                max(0.0, infer_elapsed) + max(0.0, time.perf_counter() - item_started_at),
+                6,
+            )
             results.append(out_row)
             existing_map[entry_key(out_row)] = out_row
-            safe_write_json(
-                out_file,
-                _answer_payload(
-                    rows=results,
-                    method=method,
-                    model_name=model_name,
-                    prepared_file=prepared_file,
-                    source_path=source_path,
-                    window=window,
-                    elapsed_seconds=time.perf_counter() - started_at,
-                ),
-            )
+            pending_writes += 1
+            if pending_writes >= checkpoint_every:
+                safe_write_json(
+                    out_file,
+                    _answer_payload(
+                        rows=results,
+                        method=method,
+                        model_name=model_name,
+                        prepared_file=prepared_file,
+                        source_path=source_path,
+                        window=window,
+                        elapsed_seconds=time.perf_counter() - started_at,
+                    ),
+                )
+                pending_writes = 0
             pbar.update(1)
     pbar.close()
 

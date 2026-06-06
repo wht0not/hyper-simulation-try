@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import math
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -9,6 +11,7 @@ from tqdm import tqdm
 
 from .memory import build_amem_memory_dataset, load_amem_memory_system
 from prompt.amem import build_amem_generate_query_prompt, build_amem_relevant_parts_prompt
+from utils.qa_utils import resolve_qa_answer
 from utils.utils import (
     coerce_category,
     entry_key,
@@ -59,6 +62,28 @@ def _retrieved_payload(
     model_name: str,
     elapsed_seconds: float | None = None,
 ) -> dict[str, Any]:
+    def _mean_std(values: list[float]) -> tuple[float, float]:
+        if not values:
+            return 0.0, 0.0
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        return round(mean, 6), round(math.sqrt(variance), 6)
+
+    top_k_values = [
+        float(row.get("retrieve_k", row.get("top_k", 0.0)) or 0.0) for row in rows if isinstance(row, dict)
+    ]
+    chunk_size_values = [float(row.get("chunk_size", 0.0) or 0.0) for row in rows if isinstance(row, dict)]
+    retrieval_elapsed_values: list[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        search_time = row.get("search_time", {})
+        if isinstance(search_time, dict):
+            retrieval_elapsed_values.append(float(search_time.get("total", 0.0) or 0.0))
+    top_k_mean, top_k_std = _mean_std(top_k_values)
+    chunk_size_mean, chunk_size_std = _mean_std(chunk_size_values)
+    retrieval_elapsed_mean, retrieval_elapsed_std = _mean_std(retrieval_elapsed_values)
+
     summary = {
         "method": "amem",
         "stage": "retrieve",
@@ -67,6 +92,12 @@ def _retrieved_payload(
         "retrieved_file": str(out_file),
         "amem_model_name": model_name,
         "total": len(rows),
+        "top_k_mean": top_k_mean,
+        "top_k_std": top_k_std,
+        "chunk_size_mean": chunk_size_mean,
+        "chunk_size_std": chunk_size_std,
+        "retrieval_elapsed_seconds_mean": retrieval_elapsed_mean,
+        "retrieval_elapsed_seconds_std": retrieval_elapsed_std,
     }
     if elapsed_seconds is not None:
         summary["elapsed_seconds"] = round(float(elapsed_seconds), 4)
@@ -164,12 +195,54 @@ def _select_relevant_parts(memory_system: Any, memories_text: str, query: str) -
     return val if val else memories_text
 
 
+def _split_raw_memory_blocks(memories_text: str) -> list[str]:
+    text = str(memories_text or "").strip()
+    if not text:
+        return []
+    parts = re.split(r"(?=talk start time:)", text)
+    blocks: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        block = str(part).strip()
+        if not block or block in seen:
+            continue
+        seen.add(block)
+        blocks.append(block)
+    return blocks
+
+
+def _avg_chunk_size_from_hyper_items(hyper_items: list[dict[str, Any]], retrieve_k: int)  -> float:
+    texts = [str(item.get("text", "")).strip() for item in hyper_items if str(item.get("text", "")).strip()]
+    if not texts:
+        return 0.0
+    return round(sum(len(text) for text in texts) / retrieve_k, 2)
+
+
+def _retrieve_speaker_memories(
+    memory_system: Any,
+    question: str,
+    retrieve_k: int,
+) -> tuple[str, str, str, float]:
+    started_at = time.perf_counter()
+    retrieval_query = _generate_query_keywords(memory_system, question)
+    raw_memories, _ = _search_memories(memory_system, retrieval_query, retrieve_k=retrieve_k)
+    selected_memories = _select_relevant_parts(memory_system, raw_memories, question)
+    return (
+        retrieval_query,
+        raw_memories,
+        selected_memories,
+        round(time.perf_counter() - started_at, 4),
+    )
+
+
 def retrieve_amem_dataset(
     dataset_path: str,
     output_dir: str,
     model_name: str,
     output_path: str | None = None,
     limit: int | None = None,
+    skip_memory_build: bool = False,
+    retrieve_k: int = 10,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     dataset_file = Path(dataset_path)
@@ -197,12 +270,13 @@ def retrieve_amem_dataset(
         safe_write_json(out_file, payload)
         return payload
 
-    build_amem_memory_dataset(
-        dataset_path=dataset_path,
-        output_dir=output_dir,
-        model_name=model_name,
-        limit=limit,
-    )
+    if not skip_memory_build:
+        build_amem_memory_dataset(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            model_name=model_name,
+            limit=limit,
+        )
 
     samples = _iter_amem_samples(raw_payload)
     if limit is not None and limit > 0:
@@ -257,31 +331,69 @@ def retrieve_amem_dataset(
                 if entry_key(row_stub) in existing_map:
                     pbar.update(1)
                     continue
-
-                query_for_retrieval_1 = _generate_query_keywords(speaker_1_system, question)
-                raw_speaker_1_memories, speaker_1_search_time = _search_memories(speaker_1_system, query_for_retrieval_1)
-                selected_speaker_1_memories = _select_relevant_parts(
-                    speaker_1_system, raw_speaker_1_memories, question
-                )
-
-                query_for_retrieval_2 = _generate_query_keywords(speaker_2_system, question)
-                raw_speaker_2_memories, speaker_2_search_time = _search_memories(speaker_2_system, query_for_retrieval_2)
-                selected_speaker_2_memories = _select_relevant_parts(
-                    speaker_2_system, raw_speaker_2_memories, question
-                )
+                question_retrieval_started_at = time.perf_counter()
+                (
+                    query_for_retrieval_1,
+                    raw_speaker_1_memories,
+                    selected_speaker_1_memories,
+                    speaker_1_search_time,
+                ) = _retrieve_speaker_memories(speaker_1_system, question, retrieve_k=retrieve_k)
+                (
+                    query_for_retrieval_2,
+                    raw_speaker_2_memories,
+                    selected_speaker_2_memories,
+                    speaker_2_search_time,
+                ) = _retrieve_speaker_memories(speaker_2_system, question, retrieve_k=retrieve_k)
+                speaker_1_hyper_items = [
+                    {
+                        "speaker_tag": "speaker_1",
+                        "speaker_name": speaker_1_name,
+                        "text": block,
+                    }
+                    for block in _split_raw_memory_blocks(raw_speaker_1_memories)
+                ]
+                speaker_2_hyper_items = [
+                    {
+                        "speaker_tag": "speaker_2",
+                        "speaker_name": speaker_2_name,
+                        "text": block,
+                    }
+                    for block in _split_raw_memory_blocks(raw_speaker_2_memories)
+                ]
+                if not speaker_1_hyper_items and str(selected_speaker_1_memories).strip():
+                    speaker_1_hyper_items = [
+                        {
+                            "speaker_tag": "speaker_1",
+                            "speaker_name": speaker_1_name,
+                            "text": str(selected_speaker_1_memories).strip(),
+                        }
+                    ]
+                if not speaker_2_hyper_items and str(selected_speaker_2_memories).strip():
+                    speaker_2_hyper_items = [
+                        {
+                            "speaker_tag": "speaker_2",
+                            "speaker_name": speaker_2_name,
+                            "text": str(selected_speaker_2_memories).strip(),
+                        }
+                    ]
+                combined_hyper_items = speaker_1_hyper_items + speaker_2_hyper_items
+                chunk_size = _avg_chunk_size_from_hyper_items(combined_hyper_items, retrieve_k)
 
                 row = {
                     "sample_id": sample_id,
                     "qa_id": qa_id,
                     "q": question,
-                    "answer": question_item.get("answer"),
+                    "answer": resolve_qa_answer(question_item),
                     "category": coerce_category(question_item.get("category")),
                     "method": "amem",
+                    "retrieve_k": int(retrieve_k),
+                    "chunk_size": chunk_size,
                     "retrieval_query": {
                         "speaker_1": query_for_retrieval_1,
                         "speaker_2": query_for_retrieval_2,
                     },
                     "d": [selected_speaker_1_memories, selected_speaker_2_memories],
+                    "hyper_d_items": combined_hyper_items,
                     "speakers": {
                         "speaker_1": speaker_1_name,
                         "speaker_2": speaker_2_name,
@@ -289,6 +401,7 @@ def retrieve_amem_dataset(
                     "search_time": {
                         "speaker_1": speaker_1_search_time,
                         "speaker_2": speaker_2_search_time,
+                        "total": round(time.perf_counter() - question_retrieval_started_at, 4),
                     },
                 }
                 retrieved_rows.append(row)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -93,6 +95,7 @@ def _add_sample_memories(
     speaker_name: str,
     memory_pbar: Any | None = None,
 ) -> int:
+    debug_log = os.getenv("AMEM_DEBUG_LOG", "0") == "1"
     added = 0
     for turn_idx, turn in enumerate(chat_history):
         if not isinstance(turn, dict):
@@ -105,7 +108,19 @@ def _add_sample_memories(
         timestamp = str(turn.get("timestamp", turn.get("date_time", ""))).strip() or None
         memory_id = _build_memory_id(sample_id=sample_id, speaker_name=speaker_name, turn_idx=turn_idx, turn=turn)
         before = len(memory_system.memories)
+        started_at = time.perf_counter()
+        if debug_log:
+            print(
+                f"[amem/memory] add_note start sample={sample_id} speaker={speaker_name} turn_idx={turn_idx} memory_id={memory_id}",
+                flush=True,
+            )
         memory_system.add_note(message, time=timestamp, id=memory_id)
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
+        if debug_log:
+            print(
+                f"[amem/memory] add_note done sample={sample_id} speaker={speaker_name} turn_idx={turn_idx} memory_id={memory_id} elapsed_ms={elapsed_ms:.1f}",
+                flush=True,
+            )
         if len(memory_system.memories) > before:
             added += 1
         if memory_pbar is not None:
@@ -143,7 +158,7 @@ def build_amem_memory_dataset(
         speaker_2_system = load_amem_memory_system(output_dir, sample_id, "speaker_2", speaker_2_name, model_name)
         memory_total = _count_speaker_turns(chat_history, speaker_1_name) + _count_speaker_turns(chat_history, speaker_2_name)
         memory_pbar = (
-            tqdm(total=memory_total, desc=f"locomo/memory/amem/{sample_id}", unit="turn", leave=False)
+            tqdm(total=memory_total, desc=f"locomo/memory/amem/{sample_id}", unit="turn", leave=True)
             if memory_total > 0
             else None
         )

@@ -6,19 +6,33 @@ from typing import Any
 
 from tqdm import tqdm
 
-from prompt.langmem import LOCOMO_LANGMEM_PROMPT, LOCOMO_LANGMEM_PROMPT_CAT_5
-from utils.qa_utils import build_cat5_choice_question, build_question_text
+from prompt.langmem import LOCOMO_LANGMEM_PROMPT
+from utils.qa_utils import build_question_text, resolve_qa_answer
 from utils.utils import (
     coerce_category,
     entry_key,
     load_entries,
-    load_existing_result_map,
     load_existing_results,
     prepared_output_path,
     safe_write_json,
     window_tag,
 )
 from .retrieval import count_langmem_questions, retrieve_langmem_dataset
+
+
+def _item_metrics_from_texts(items: list[str]) -> tuple[int, float]:
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return 0, 0.0
+    avg_chunk_size = sum(len(item) for item in cleaned) / len(cleaned)
+    return len(cleaned), round(avg_chunk_size, 2)
+
+
+def _resolve_langmem_item_texts(entry: dict[str, Any]) -> list[str]:
+    d_list = entry.get("d", [])
+    if not isinstance(d_list, list):
+        return []
+    return [str(one).strip() for one in d_list if str(one).strip()]
 
 
 def _prepared_payload(
@@ -69,29 +83,13 @@ def _prepare_langmem_row(
         "method": "langmem",
     }
 
-    if category_int == 5:
-        cat5_question, cat5_answer_key = build_cat5_choice_question(
-            question,
-            str(answer or ""),
-            sample_id=sample_id,
-            qa_id=qa_id,
-        )
-        prepared["cat5_answer_key"] = cat5_answer_key
-        prepared["prompt"] = LOCOMO_LANGMEM_PROMPT_CAT_5.format(
-            speaker_1_user_id=speaker_1_name,
-            speaker_1_memories=speaker_1_memories or "No relevant memories found.",
-            speaker_2_user_id=speaker_2_name,
-            speaker_2_memories=speaker_2_memories or "No relevant memories found.",
-            question=cat5_question,
-        )
-    else:
-        prepared["prompt"] = LOCOMO_LANGMEM_PROMPT.format(
-            speaker_1_user_id=speaker_1_name,
-            speaker_1_memories=speaker_1_memories or "No relevant memories found.",
-            speaker_2_user_id=speaker_2_name,
-            speaker_2_memories=speaker_2_memories or "No relevant memories found.",
-            question=build_question_text(question, category_int),
-        )
+    prepared["prompt"] = LOCOMO_LANGMEM_PROMPT.format(
+        speaker_1_user_id=speaker_1_name,
+        speaker_1_memories=speaker_1_memories or "No relevant memories found.",
+        speaker_2_user_id=speaker_2_name,
+        speaker_2_memories=speaker_2_memories or "No relevant memories found.",
+        question=build_question_text(question, category_int),
+    )
     return prepared
 
 
@@ -101,31 +99,43 @@ def prepare_langmem_dataset(
     model_name: str,
     limit: int | None = None,
     embedding_model_name: str = "qwen3-embedding:0.6b",
+    skip_retrieve: bool = False,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     dataset_file = Path(dataset_path)
-    retrieved_payload = retrieve_langmem_dataset(
-        dataset_path=dataset_path,
-        output_dir=output_dir,
-        model_name=model_name,
-        limit=limit,
-        embedding_model_name=embedding_model_name,
-    )
-    source_path = str(retrieved_payload.get("summary", {}).get("source_path", dataset_file))
-    source_file = Path(source_path)
-    retrieved_file = Path(str(retrieved_payload.get("summary", {}).get("retrieved_file", dataset_file)))
+    if skip_retrieve:
+        source_file = dataset_file
+        retrieved_file = dataset_file
+    else:
+        retrieved_payload = retrieve_langmem_dataset(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            model_name=model_name,
+            limit=limit,
+            embedding_model_name=embedding_model_name,
+        )
+        source_path = str(retrieved_payload.get("summary", {}).get("source_path", dataset_file))
+        source_file = Path(source_path)
+        retrieved_file = Path(str(retrieved_payload.get("summary", {}).get("retrieved_file", dataset_file)))
     out_file = prepared_output_path(output_dir, "langmem", source_file)
     entries = load_entries(retrieved_file, limit=limit)
 
     total_questions = len(entries) if entries else count_langmem_questions(dataset_file, limit=limit)
 
-    existing_map = load_existing_result_map(out_file)
-    prepared_rows = load_existing_results(out_file)
+    prepared_rows = [
+        row
+        for row in load_existing_results(out_file)
+        if coerce_category(row.get("category", -1)) != 5
+    ]
+    existing_map = {entry_key(row): row for row in prepared_rows if entry_key(row)}
     pbar = tqdm(total=total_questions, desc="locomo/compose/langmem", unit="q")
 
     try:
         for entry in entries:
             if not isinstance(entry, dict):
+                continue
+            if coerce_category(entry.get("category", -1)) == 5:
+                pbar.update(1)
                 continue
             if entry_key(entry) in existing_map:
                 pbar.update(1)
@@ -141,7 +151,7 @@ def prepare_langmem_dataset(
                 sample_id=str(entry.get("sample_id", "")),
                 qa_id=str(entry.get("qa_id", "")),
                 question=str(entry.get("q", "")).strip(),
-                answer=entry.get("answer"),
+                answer=resolve_qa_answer(entry),
                 category=coerce_category(entry.get("category")),
                 speaker_1_name=speaker_1_name,
                 speaker_1_memories=speaker_1_memories,
@@ -154,6 +164,9 @@ def prepare_langmem_dataset(
                 if isinstance(search_time, dict)
                 else 0.0,
             )
+            top_k, chunk_size = _item_metrics_from_texts(_resolve_langmem_item_texts(entry))
+            prepared["top_k"] = top_k
+            prepared["chunk_size"] = chunk_size
             prepared_rows.append(prepared)
             existing_map[entry_key(prepared)] = prepared
             safe_write_json(

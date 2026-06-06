@@ -28,6 +28,7 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
+from utils.qa_utils import resolve_qa_answer
 
 
 def _get_memory_cache_path(source_file: Path, chunk_size: int) -> Path:
@@ -244,7 +245,7 @@ def retrieve_rag_dataset(
                         "sample_id": sample_id,
                         "qa_id": qa_id,
                         "q": q,
-                        "answer": qa.get("answer"),
+                        "answer": resolve_qa_answer(qa),
                         "category": coerce_category(qa.get("category", -1)),
                         "method": "rag",
                         "rag_mode": "chunk",

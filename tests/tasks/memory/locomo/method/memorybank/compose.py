@@ -7,16 +7,27 @@ from typing import Any
 from tqdm import tqdm
 
 from prompt.memorybank import build_memorybank_answer_prompt
+from utils.qa_utils import build_question_text, resolve_qa_answer
 from utils.utils import (
+    coerce_category,
     entry_key,
     load_entries,
-    load_existing_result_map,
     load_existing_results,
     prepared_output_path,
     safe_write_json,
     window_tag,
 )
 from .retrieval import count_memorybank_questions, retrieve_memorybank_dataset
+
+
+def _resolve_memorybank_payload(entry: dict[str, Any]) -> dict[str, Any]:
+    payload = entry.get("memorybank_context")
+    if isinstance(payload, dict):
+        return payload
+    payload = entry.get("memorybank_memory")
+    if isinstance(payload, dict):
+        return payload
+    return {}
 
 
 def _prepared_payload(
@@ -52,7 +63,6 @@ def _prepare_memorybank_row(
     overall_history = str(memory_payload.get("overall_history", "")).strip()
     overall_personality = str(memory_payload.get("overall_personality", "")).strip()
     related_memory = "\n\n".join([str(one).strip() for one in d_list if str(one).strip()]).strip()
-    search_time = float(memory_payload.get("search_time", 0.0) or 0.0)
 
     prepared: dict[str, Any] = {
         "sample_id": sample_id,
@@ -67,16 +77,10 @@ def _prepare_memorybank_row(
         overall_history=overall_history,
         overall_personality=overall_personality,
         related_memory=related_memory,
-        question=question,
-        category=category,
-        answer=str(answer or ""),
-        sample_id=sample_id,
-        qa_id=qa_id,
+        question=build_question_text(question, category),
     )
     prepared["prompt"] = str(answer_prompt_payload["prompt"])
     prepared["answer_temperature"] = float(answer_prompt_payload.get("temperature", 0.1))
-    if isinstance(answer_prompt_payload.get("cat5_answer_key"), dict):
-        prepared["cat5_answer_key"] = answer_prompt_payload["cat5_answer_key"]
     return prepared
 
 
@@ -85,62 +89,82 @@ def prepare_memorybank_dataset(
     output_dir: str,
     model_name: str,
     limit: int | None = None,
+    skip_retrieve: bool = False,
+    checkpoint_every: int = 500,
+    retrieve_k: int = 5,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     dataset_file = Path(dataset_path)
-    retrieved_payload = retrieve_memorybank_dataset(
-        dataset_path=dataset_path,
-        output_dir=output_dir,
-        model_name=model_name,
-        limit=limit,
-    )
-    source_path = str(retrieved_payload.get("summary", {}).get("source_path", dataset_file))
-    source_file = Path(source_path)
-    retrieved_file = Path(str(retrieved_payload.get("summary", {}).get("retrieved_file", dataset_file)))
+    if skip_retrieve:
+        source_file = dataset_file
+        retrieved_file = dataset_file
+    else:
+        retrieved_payload = retrieve_memorybank_dataset(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            model_name=model_name,
+            limit=limit,
+            retrieve_k=retrieve_k,
+        )
+        source_path = str(retrieved_payload.get("summary", {}).get("source_path", dataset_file))
+        source_file = Path(source_path)
+        retrieved_file = Path(str(retrieved_payload.get("summary", {}).get("retrieved_file", dataset_file)))
     out_file = prepared_output_path(output_dir, "memorybank", source_file)
     entries = load_entries(retrieved_file, limit=limit)
 
     total_questions = len(entries) if entries else count_memorybank_questions(dataset_file, limit=limit)
-    existing_map = load_existing_result_map(out_file)
-    prepared_rows = load_existing_results(out_file)
+    prepared_rows = [
+        row
+        for row in load_existing_results(out_file)
+        if coerce_category(row.get("category", -1)) != 5
+    ]
+    existing_map = {entry_key(row): row for row in prepared_rows if entry_key(row)}
+    checkpoint_every = max(1, int(checkpoint_every))
+    pending_writes = 0
     pbar = tqdm(total=total_questions, desc="locomo/compose/memorybank", unit="q")
 
     try:
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
+            if coerce_category(entry.get("category", -1)) == 5:
+                pbar.update(1)
+                continue
             if entry_key(entry) in existing_map:
                 pbar.update(1)
                 continue
-            memory_payload = entry.get("memorybank_context", {})
-            if not isinstance(memory_payload, dict):
-                memory_payload = {}
+            memory_payload = _resolve_memorybank_payload(entry)
             d_list = entry.get("d", [])
             if isinstance(d_list, list):
                 d_list = [str(one).strip() for one in d_list if str(one).strip()]
             else:
                 d_list = []
+            item_started_at = time.perf_counter()
             prepared = _prepare_memorybank_row(
                 sample_id=str(entry.get("sample_id", "")),
                 qa_id=str(entry.get("qa_id", "")),
                 question=str(entry.get("q", "")).strip(),
-                answer=entry.get("answer"),
-                category=int(entry.get("category", -1)),
+                answer=resolve_qa_answer(entry),
+                category=coerce_category(entry.get("category", -1)),
                 d_list=d_list,
                 memory_payload=memory_payload,
             )
+            prepared["prepared_elapsed_seconds"] = round(time.perf_counter() - item_started_at, 6)
             prepared_rows.append(prepared)
             existing_map[entry_key(prepared)] = prepared
-            safe_write_json(
-                out_file,
-                _prepared_payload(
-                    prepared_rows,
-                    source_file,
+            pending_writes += 1
+            if pending_writes >= checkpoint_every:
+                safe_write_json(
                     out_file,
-                    model_name=model_name,
-                    elapsed_seconds=time.perf_counter() - started_at,
-                ),
-            )
+                    _prepared_payload(
+                        prepared_rows,
+                        source_file,
+                        out_file,
+                        model_name=model_name,
+                        elapsed_seconds=time.perf_counter() - started_at,
+                    ),
+                )
+                pending_writes = 0
             pbar.update(1)
     finally:
         pbar.close()

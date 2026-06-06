@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from utils.qa_utils import build_cat5_choice_question
-
 
 MEMORYBANK_SUMMARIZE_SESSION_PROMPT = """Please summarize the following dialogue as concisely as possible, extracting the main themes and key information. If there are multiple key events, you may summarize them separately.
 
@@ -13,12 +11,12 @@ Dialogue content:
 Summarization:"""
 
 
-MEMORYBANK_SUMMARIZE_PERSONALITY_PROMPT = """Based on the following dialogue, please summarize the user's personality traits and emotions, and devise response strategies based on your speculation.
+MEMORYBANK_SUMMARIZE_PERSONALITY_PROMPT = """Based on the following dialogue, summarize the user's personality traits and emotions only.
 
 Dialogue content:
 {dialogue_text}
 
-{user_name}'s personality traits, emotions, and AI response strategy are:"""
+{user_name}'s personality traits and emotions are:"""
 
 
 MEMORYBANK_OVERALL_HISTORY_PROMPT = """Please provide a highly concise summary of the following dated events, capturing the essential key information as succinctly as possible.
@@ -28,11 +26,11 @@ MEMORYBANK_OVERALL_HISTORY_PROMPT = """Please provide a highly concise summary o
 Summarization:"""
 
 
-MEMORYBANK_OVERALL_PERSONALITY_PROMPT = """The following are the user's exhibited personality traits and emotions throughout multiple dialogues, along with appropriate response strategies for the current situation:
+MEMORYBANK_OVERALL_PERSONALITY_PROMPT = """The following are the user's exhibited personality traits and emotions throughout multiple dialogues:
 
 {dated_personality}
 
-Please provide a highly concise and general summary of the user's personality and the most appropriate response strategy for the AI companion, summarized as:"""
+Please provide a highly concise and general summary of the user's personality and emotional tendencies, summarized as:"""
 
 
 MEMORYBANK_ANSWER_PROMPT = """Now you will play the role of an AI companion for user {user_name}. You should understand past memory and extract information from memory when it is relevant to the question.
@@ -53,39 +51,15 @@ Question: {question}
 Short answer:"""
 
 
-MEMORYBANK_ANSWER_PROMPT_CAT_2 = """Now you will play the role of an AI companion for user {user_name}. You should understand past memory and extract information from memory when it is relevant to the question.
-
-The summary of your past memories with the user is:
+HYPER_MEMORYBANK_ANSWER_PROMPT = """
+Overall memory summary:
 {overall_history}
 
-The user's personality and response strategy are:
-{overall_personality}
-
-The memory most relevant to the question is:
+Most relevant memory:
 {related_memory}
 
-Answer the following question using DATE of CONVERSATION to give an approximate date. Please generate the shortest possible answer, using words from the memory where possible, and avoid using any subjects.
-
+Answer with a short phrase only (no full sentence, no explanation, no markdown) base on the above context.
 Question: {question}
-
-Short answer:"""
-
-
-MEMORYBANK_ANSWER_PROMPT_CAT_5 = """Now you will play the role of an AI companion for user {user_name}. You should understand past memory and extract information from memory when it is relevant to the question.
-
-The summary of your past memories with the user is:
-{overall_history}
-
-The user's personality and response strategy are:
-{overall_personality}
-
-The memory most relevant to the question is:
-{related_memory}
-
-Answer the following question by selecting the correct answer: {option_a} or {option_b}
-
-Question: {question}
-
 Short answer:"""
 
 
@@ -114,36 +88,27 @@ def build_memorybank_answer_prompt(
     overall_personality: str,
     related_memory: str,
     question: str,
-    category: Any,
-    answer: str = "",
-    sample_id: Any = "",
-    qa_id: Any = "",
 ) -> dict[str, Any]:
-    category_int = int(category)
-    base_kwargs = {
+    prompt_kwargs = {
         "user_name": str(user_name).strip() or "User",
         "overall_history": str(overall_history).strip() or "No past summary available.",
         "overall_personality": str(overall_personality).strip() or "No personality summary available.",
         "related_memory": str(related_memory).strip() or "No relevant memory found.",
         "question": str(question).strip(),
     }
-    payload: dict[str, Any] = {"temperature": 0.1}
-    if category_int == 5:
-        cat5_question, cat5_answer_key = build_cat5_choice_question(
-            question,
-            str(answer or ""),
-            sample_id=sample_id,
-            qa_id=qa_id,
-        )
-        payload["cat5_answer_key"] = cat5_answer_key
-        cat5_kwargs = base_kwargs.copy()
-        cat5_kwargs["question"] = cat5_question
-        cat5_kwargs["option_a"] = cat5_answer_key["a"]
-        cat5_kwargs["option_b"] = cat5_answer_key["b"]
-        payload["prompt"] = MEMORYBANK_ANSWER_PROMPT_CAT_5.format(**cat5_kwargs)
-        return payload
-    if category_int == 2:
-        payload["prompt"] = MEMORYBANK_ANSWER_PROMPT_CAT_2.format(**base_kwargs)
-        return payload
-    payload["prompt"] = MEMORYBANK_ANSWER_PROMPT.format(**base_kwargs)
-    return payload
+    return {"temperature": 0.1, "prompt": MEMORYBANK_ANSWER_PROMPT.format(**prompt_kwargs)}
+
+
+def build_hyper_memorybank_answer_prompt(
+    user_name: str,
+    overall_history: str,
+    related_memory: str,
+    question: str,
+) -> dict[str, Any]:
+    prompt_kwargs = {
+        "user_name": str(user_name).strip() or "User",
+        "overall_history": str(overall_history).strip() or "No past summary available.",
+        "related_memory": str(related_memory).strip() or "No relevant memory found.",
+        "question": str(question).strip(),
+    }
+    return {"temperature": 0.1, "prompt": HYPER_MEMORYBANK_ANSWER_PROMPT.format(**prompt_kwargs)}

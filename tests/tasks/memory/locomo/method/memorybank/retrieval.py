@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import time
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from .memory import build_memorybank_memory_dataset, load_memorybank_memory_payload
+from utils.qa_utils import resolve_qa_answer
 from utils.utils import (
     coerce_category,
     entry_key,
@@ -59,6 +61,28 @@ def _retrieved_payload(
     model_name: str,
     elapsed_seconds: float | None = None,
 ) -> dict[str, Any]:
+    def _mean_std(values: list[float]) -> tuple[float, float]:
+        if not values:
+            return 0.0, 0.0
+        mean = sum(values) / len(values)
+        variance = sum((value - mean) ** 2 for value in values) / len(values)
+        return round(mean, 6), round(math.sqrt(variance), 6)
+
+    top_k_values = [
+        float(row.get("retrieve_k", row.get("top_k", 0.0)) or 0.0) for row in rows if isinstance(row, dict)
+    ]
+    chunk_size_values = [float(row.get("chunk_size", 0.0) or 0.0) for row in rows if isinstance(row, dict)]
+    retrieval_elapsed_values: list[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        context_payload = row.get("memorybank_context", {})
+        if isinstance(context_payload, dict):
+            retrieval_elapsed_values.append(float(context_payload.get("search_time", 0.0) or 0.0))
+    top_k_mean, top_k_std = _mean_std(top_k_values)
+    chunk_size_mean, chunk_size_std = _mean_std(chunk_size_values)
+    retrieval_elapsed_mean, retrieval_elapsed_std = _mean_std(retrieval_elapsed_values)
+
     summary = {
         "method": "memorybank",
         "stage": "retrieve",
@@ -67,6 +91,12 @@ def _retrieved_payload(
         "retrieved_file": str(out_file),
         "memorybank_model_name": model_name,
         "total": len(rows),
+        "top_k_mean": top_k_mean,
+        "top_k_std": top_k_std,
+        "chunk_size_mean": chunk_size_mean,
+        "chunk_size_std": chunk_size_std,
+        "retrieval_elapsed_seconds_mean": retrieval_elapsed_mean,
+        "retrieval_elapsed_seconds_std": retrieval_elapsed_std,
     }
     if elapsed_seconds is not None:
         summary["elapsed_seconds"] = round(float(elapsed_seconds), 4)
@@ -81,7 +111,7 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
     return np.asarray(get_embedding_batch(texts), dtype=np.float32)
 
 
-def _top_k_summaries(question: str, summary_rows: list[dict[str, Any]], top_k: int = 3) -> list[dict[str, Any]]:
+def _top_k_summaries(question: str, summary_rows: list[dict[str, Any]], retrieve_k: int = 5) -> list[dict[str, Any]]:
     if not summary_rows:
         return []
     from hyper_simulation.component.embedding import get_embedding_batch
@@ -90,9 +120,16 @@ def _top_k_summaries(question: str, summary_rows: list[dict[str, Any]], top_k: i
     summary_texts = [str(row.get("content", "")).strip() for row in summary_rows]
     summary_embeddings = _embed_texts(summary_texts)
     scores = np.matmul(summary_embeddings, question_embedding)
-    top_k = max(1, min(int(top_k), len(summary_rows)))
-    sorted_indices = np.argsort(scores)[::-1][:top_k]
+    retrieve_k = max(1, min(int(retrieve_k), len(summary_rows)))
+    sorted_indices = np.argsort(scores)[::-1][:retrieve_k]
     return [summary_rows[int(idx)] for idx in sorted_indices.tolist()]
+
+
+def _avg_chunk_size_from_texts(items: list[str]) -> float:
+    cleaned = [str(item).strip() for item in items if str(item).strip()]
+    if not cleaned:
+        return 0.0
+    return round(sum(len(item) for item in cleaned) / len(cleaned), 2)
 
 
 def retrieve_memorybank_dataset(
@@ -101,6 +138,8 @@ def retrieve_memorybank_dataset(
     model_name: str,
     output_path: str | None = None,
     limit: int | None = None,
+    skip_memory_build: bool = False,
+    retrieve_k: int = 5,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
     dataset_file = Path(dataset_path)
@@ -124,12 +163,13 @@ def retrieve_memorybank_dataset(
     if limit is not None and limit > 0:
         samples = samples[:limit]
 
-    build_memorybank_memory_dataset(
-        dataset_path=dataset_path,
-        output_dir=output_dir,
-        model_name=model_name,
-        limit=limit,
-    )
+    if not skip_memory_build:
+        build_memorybank_memory_dataset(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            model_name=model_name,
+            limit=limit,
+        )
     total_questions = count_memorybank_questions(dataset_file, limit=limit)
     existing_map = load_existing_result_map(out_file)
     retrieved_rows = load_existing_results(out_file)
@@ -186,17 +226,20 @@ def retrieve_memorybank_dataset(
                     continue
 
                 retrieve_started_at = time.perf_counter()
-                top_summary_rows = _top_k_summaries(question, summary_rows, top_k=3)
-                retrieval_time = round(time.perf_counter() - retrieve_started_at, 4)
+                top_summary_rows = _top_k_summaries(question, summary_rows, retrieve_k=retrieve_k)
                 d_list = [f"Date: {row['date']}\nSummary: {row['content']}" for row in top_summary_rows]
+                chunk_size = _avg_chunk_size_from_texts(d_list)
+                retrieval_time = round(time.perf_counter() - retrieve_started_at, 4)
 
                 row = {
                     "sample_id": sample_id,
                     "qa_id": qa_id,
                     "q": question,
-                    "answer": question_item.get("answer"),
+                    "answer": resolve_qa_answer(question_item),
                     "category": coerce_category(question_item.get("category")),
                     "method": "memorybank",
+                    "retrieve_k": int(retrieve_k),
+                    "chunk_size": chunk_size,
                     "d": d_list,
                     "memorybank_context": {
                         "user_name": user_name,

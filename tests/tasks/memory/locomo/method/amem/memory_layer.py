@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import importlib
+import os
 import re
+import time as time_module
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -62,11 +64,13 @@ def _get_ollama_embeddings(model_name: str = "qwen3-embedding:0.6b"):
 class OllamaController:
     def __init__(self, model: str = "qwen3.5:9b"):
         from langchain_ollama import ChatOllama
-        self._llm = ChatOllama(model=model, temperature=0.0, reasoning=False)
+        self._llm = ChatOllama(model=model, temperature=0.0, top_p=1, reasoning=False, num_predict=1024)
 
     def get_completion(self, prompt: str, temperature: float = 0.7) -> str:
         _ = temperature
+        # print(prompt)
         response = self._llm.invoke(prompt)
+        # print(response)
         return str(getattr(response, "content", "") or "").strip()
 
 
@@ -127,7 +131,14 @@ Content:
 """
         default = {"keywords": _simple_keywords(content), "context": "General", "tags": []}
         try:
+            if os.getenv("AMEM_DEBUG_LOG", "0") == "1":
+                print(
+                    f"[amem] analyze_content llm_start content_len={len(str(content))}",
+                    flush=True,
+                )
             response = llm_controller.llm.get_completion(prompt, temperature=0.3)
+            if os.getenv("AMEM_DEBUG_LOG", "0") == "1":
+                print("[amem] analyze_content llm_done", flush=True)
             parsed = _safe_json_loads(response, default=default)
             keywords = parsed.get("keywords", default["keywords"])
             context = parsed.get("context", default["context"])
@@ -340,6 +351,8 @@ class AgenticMemorySystem:
         self.llm_controller = LLMController(model=llm_model)
         self.evo_threshold = int(evo_threshold)
         self.evo_cnt = 0
+        self._debug_log = os.getenv("AMEM_DEBUG_LOG", "0") == "1"
+        self._debug_slow_ms = float(os.getenv("AMEM_DEBUG_SLOW_MS", "2000"))
         self._namespace = str(namespace or "default").strip() or "default"
         self._memory_dir = Path(output_dir) / "memory" if output_dir else None
         if self._memory_dir is not None:
@@ -364,11 +377,11 @@ nearest memories:
 {nearest_neighbors_memories}
 """
 
-    def _memory_file_path(self, memory_id: str) -> Path | None:
+    def _memory_log_path(self) -> Path | None:
         if self._memory_dir is None:
             return None
         safe_ns = re.sub(r"[^a-zA-Z0-9._-]", "_", self._namespace)
-        return self._memory_dir / f"amem_{safe_ns}.json"
+        return self._memory_dir / f"amem_{safe_ns}.jsonl"
 
     def _memory_document(self, note: MemoryNote) -> str:
         return (
@@ -398,35 +411,31 @@ nearest memories:
         }
 
     def _persist_note(self, note: MemoryNote) -> None:
-        path = self._memory_file_path(note.id)
-        if path is None:
+        log_path = self._memory_log_path()
+        if log_path is None:
             return
-        payload = {
-            "method": "amem",
-            "namespace": self._namespace,
-            "memory_id": self._namespace,
-            "updated_at": datetime.now().strftime("%Y%m%d%H%M"),
-            "memories": [self._memory_payload(one_note) for one_note in self.memories.values()],
-        }
-        tmp_path = path.with_suffix(path.suffix + ".tmp")
-        tmp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-        tmp_path.replace(path)
+        line = json.dumps(self._memory_payload(note), ensure_ascii=False)
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
 
     def _load_memories_from_disk(self) -> None:
         if self._memory_dir is None:
             return
-        memory_file = self._memory_file_path(self._namespace)
-        if memory_file is None or not memory_file.exists():
+        log_path = self._memory_log_path()
+        if log_path is None or not log_path.exists():
             return
+        rows: list[dict[str, Any]] = []
         try:
-            payload = json.loads(memory_file.read_text(encoding="utf-8"))
+            for raw_line in log_path.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line:
+                    continue
+                row = json.loads(line)
+                if isinstance(row, dict):
+                    rows.append(row)
         except Exception:
             return
-        if not isinstance(payload, dict):
-            return
-        rows = payload.get("memories", [])
-        if not isinstance(rows, list):
-            return
+
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -458,11 +467,42 @@ nearest memories:
         note_id = str(kwargs.get("id", "")).strip()
         if note_id and note_id in self.memories:
             return note_id
+        started_at = time_module.perf_counter()
+        if self._debug_log:
+            print(
+                f"[amem] add_note start ns={self._namespace} note_id={note_id or 'new'} content_len={len(str(content))}",
+                flush=True,
+            )
         note = MemoryNote(content=content, llm_controller=self.llm_controller, timestamp=time, **kwargs)
+        after_note = time_module.perf_counter()
+        if self._debug_log:
+            print(
+                f"[amem] add_note stage=memory_note ns={self._namespace} note_id={note.id} ms={(after_note - started_at) * 1000:.1f}",
+                flush=True,
+            )
         should_evolve, note = self.process_memory(note)
+        after_process = time_module.perf_counter()
+        if self._debug_log:
+            print(
+                f"[amem] add_note stage=process_memory ns={self._namespace} note_id={note.id} ms={(after_process - after_note) * 1000:.1f} should_evolve={should_evolve}",
+                flush=True,
+            )
         self.memories[note.id] = note
         self.retriever.add_documents([self._memory_document(note)])
+        after_embed = time_module.perf_counter()
+        if self._debug_log:
+            print(
+                f"[amem] add_note stage=add_documents ns={self._namespace} note_id={note.id} ms={(after_embed - after_process) * 1000:.1f}",
+                flush=True,
+            )
         self._persist_note(note)
+        after_persist = time_module.perf_counter()
+        total_ms = (after_persist - started_at) * 1000
+        if self._debug_log or total_ms >= self._debug_slow_ms:
+            print(
+                f"[amem] add_note done ns={self._namespace} note_id={note.id} total_ms={total_ms:.1f}",
+                flush=True,
+            )
         if should_evolve:
             self.evo_cnt += 1
             if self.evo_threshold > 0 and self.evo_cnt % self.evo_threshold == 0:
@@ -495,7 +535,17 @@ nearest memories:
             "new_tags_neighborhood": [],
         }
         try:
+            if self._debug_log:
+                print(
+                    f"[amem] process_memory llm_start ns={self._namespace} note_id={note.id} neighbor_cnt={len(indices)}",
+                    flush=True,
+                )
             response = self.llm_controller.llm.get_completion(prompt, temperature=0.2)
+            if self._debug_log:
+                print(
+                    f"[amem] process_memory llm_done ns={self._namespace} note_id={note.id}",
+                    flush=True,
+                )
             decision = _safe_json_loads(response, default=default)
             should_evolve = bool(decision.get("should_evolve", False))
             if not should_evolve:

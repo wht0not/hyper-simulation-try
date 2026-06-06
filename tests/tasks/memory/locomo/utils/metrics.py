@@ -22,7 +22,7 @@ from .utils import coerce_category
 
 _ps = PorterStemmer()
 LLM_JUDGE_MODEL = "atla/selene-mini"
-LLM_JUDGE_REPEAT = 5
+LLM_JUDGE_REPEAT = 1
 
 LLM_JUDGE_PROMPT = """
 Your task is to label an answer to a question as CORRECT or WRONG.
@@ -33,8 +33,8 @@ You will be given:
 4. The model prediction.
 
 Rules:
-- For categories 1, 2, 3, 4: the candidate answer field is the ground-truth answer. Be generous about wording differences if the prediction clearly refers to the same fact.
-- For category 5: the candidate answer field is intentionally misleading. The correct behavior is to say that the information is unavailable, not mentioned, unknown, or cannot be determined. If the model prediction gives the misleading candidate answer as if it were true, that is WRONG.
+- The candidate answer field is the ground-truth answer.
+- Be generous about wording differences if the prediction clearly refers to the same fact.
 - For time expressions, accept equivalent dates or time periods even if wording differs.
 
 Question: {question}

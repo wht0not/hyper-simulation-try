@@ -187,6 +187,7 @@ def evaluate_results_file(
     window: str = "",
     judge_max_workers: int = 4,
     llm_judge_repeat: int = LLM_JUDGE_REPEAT,
+    checkpoint_every: int = 500,
 ) -> dict[str, Any]:
     answers_file = Path(answers_path)
     payload = json.loads(answers_file.read_text(encoding="utf-8"))
@@ -214,6 +215,8 @@ def evaluate_results_file(
     row_order: list[str] = []
     seen_keys: set[str] = set()
     pending_rows: list[tuple[str, dict[str, Any]]] = []
+    checkpoint_every = max(1, int(checkpoint_every))
+    pending_writes = 0
 
     for row in valid_rows:
         key = entry_key(row)
@@ -267,7 +270,10 @@ def evaluate_results_file(
                 ),
                 "results": evaluated_rows,
             }
-            safe_write_json(output_file, evaluated_payload)
+            pending_writes += 1
+            if pending_writes >= checkpoint_every:
+                safe_write_json(output_file, evaluated_payload)
+                pending_writes = 0
 
     evaluated_rows = _materialize_rows(row_order, evaluated_map)
     evaluated_payload = {

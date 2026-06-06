@@ -12,6 +12,7 @@ if not hasattr(typing, "NotRequired"):
         typing.NotRequired = Optional
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from typing import Any
 from tqdm import tqdm
 
 from .memory import build_langmem_memory_dataset, load_langmem_memories
+from utils.qa_utils import resolve_qa_answer
 from utils.utils import (
     coerce_category,
     entry_key,
@@ -29,6 +31,15 @@ from utils.utils import (
     safe_write_json,
     window_tag,
 )
+
+
+def _langmem_debug_enabled() -> bool:
+    return os.getenv("LANGMEM_DEBUG_LOG", "0") == "1"
+
+
+def _langmem_log(message: str) -> None:
+    if _langmem_debug_enabled():
+        print(f"[LANGMEM][DEBUG] {message}", flush=True)
 
 
 def _iter_langmem_samples(payload: Any) -> list[tuple[str, dict[str, Any]]]:
@@ -163,20 +174,28 @@ def _build_agent(model_name: str, embedding_model_name: str):
 """
         return {"messages": [{"role": "system", "content": system_msg}]}
 
+    started_at = time.perf_counter()
+    _langmem_log(f"create_agent start model={model_name} embedding={embedding_model_name}")
+    embed_started_at = time.perf_counter()
     dims, embed_fn = _build_embed_fn(embedding_model_name)
+    _langmem_log(
+        f"create_agent embed_ready dims={dims} elapsed={round(time.perf_counter() - embed_started_at, 3)}s"
+    )
     store = InMemoryStore(index={"dims": dims, "embed": embed_fn})
-    llm = ChatOllama(model=model_name, temperature=0.0, reasoning=False)
+    llm = ChatOllama(model=model_name, temperature=0.0, top_p=1, reasoning=False, num_predict=1024)
     tools = [
         create_manage_memory_tool(namespace=("memories",), store=store),
         create_search_memory_tool(namespace=("memories",), store=store),
     ]
-    return create_agent(
+    agent = create_agent(
         model=llm,
         tools=tools,
         store=store,
         checkpointer=MemorySaver(),
         middleware=[pre_model_hook],
     )
+    _langmem_log(f"create_agent done elapsed={round(time.perf_counter() - started_at, 3)}s")
+    return agent
 
 
 def _load_agent_memories(
@@ -188,16 +207,30 @@ def _load_agent_memories(
 ) -> None:
     config = {"configurable": {"thread_id": thread_id}}
     existing_memories = load_langmem_memories(output_dir=output_dir, sample_id=sample_id, speaker_name=speaker_name)
+    total = len(existing_memories)
+    _langmem_log(
+        f"memory_load start sample={sample_id} speaker={speaker_name} thread={thread_id} total={total}"
+    )
+    loaded = 0
+    started_at = time.perf_counter()
     for memory_payload in existing_memories:
         content = str(memory_payload.get("memory", memory_payload.get("summary", ""))).strip()
         if not content:
             continue
         agent.invoke({"messages": [{"role": "user", "content": content}]}, config=config)
+        loaded += 1
+        if loaded == total or loaded % 50 == 0:
+            _langmem_log(f"memory_load progress sample={sample_id} speaker={speaker_name} loaded={loaded}/{total}")
+    _langmem_log(
+        f"memory_load done sample={sample_id} speaker={speaker_name} loaded={loaded}/{total} elapsed={round(time.perf_counter() - started_at, 3)}s"
+    )
 
 
 def _search_memories(agent: Any, query: str, thread_id: str) -> tuple[str, float]:
     config = {"configurable": {"thread_id": thread_id}}
     started_at = time.perf_counter()
+    query_len = len(query)
+    _langmem_log(f"search start thread={thread_id} query_len={query_len}")
     try:
         response = agent.invoke({"messages": [{"role": "user", "content": query}]}, config=config)
         messages = response.get("messages", []) if isinstance(response, dict) else []
@@ -207,10 +240,16 @@ def _search_memories(agent: Any, query: str, thread_id: str) -> tuple[str, float
                 content = last_message.get("content", "")
             else:
                 content = getattr(last_message, "content", "")
-            return str(content or "").strip(), round(time.perf_counter() - started_at, 4)
+            elapsed = round(time.perf_counter() - started_at, 4)
+            _langmem_log(f"search done thread={thread_id} elapsed={elapsed}s")
+            return str(content or "").strip(), elapsed
     except Exception as exc:
-        return f"[ERROR] {type(exc).__name__}: {exc}", round(time.perf_counter() - started_at, 4)
-    return "", round(time.perf_counter() - started_at, 4)
+        elapsed = round(time.perf_counter() - started_at, 4)
+        _langmem_log(f"search error thread={thread_id} elapsed={elapsed}s error={type(exc).__name__}: {exc}")
+        return f"[ERROR] {type(exc).__name__}: {exc}", elapsed
+    elapsed = round(time.perf_counter() - started_at, 4)
+    _langmem_log(f"search done thread={thread_id} elapsed={elapsed}s empty_response=1")
+    return "", elapsed
 
 
 def retrieve_langmem_dataset(
@@ -220,8 +259,12 @@ def retrieve_langmem_dataset(
     output_path: str | None = None,
     limit: int | None = None,
     embedding_model_name: str = "qwen3-embedding:0.6b",
+    skip_memory_build: bool = False,
 ) -> dict[str, Any]:
     started_at = time.perf_counter()
+    _langmem_log(
+        f"retrieve start dataset={dataset_path} output_dir={output_dir} limit={limit} skip_memory_build={skip_memory_build}"
+    )
     dataset_file = Path(dataset_path)
     if output_path:
         out_file = Path(output_path)
@@ -246,18 +289,22 @@ def retrieve_langmem_dataset(
         safe_write_json(out_file, payload)
         return payload
 
-    build_langmem_memory_dataset(
-        dataset_path=dataset_path,
-        output_dir=output_dir,
-        model_name=model_name,
-        limit=limit,
-    )
+    if not skip_memory_build:
+        _langmem_log("retrieve memory_build start")
+        build_langmem_memory_dataset(
+            dataset_path=dataset_path,
+            output_dir=output_dir,
+            model_name=model_name,
+            limit=limit,
+        )
+        _langmem_log("retrieve memory_build done")
 
     samples = _iter_langmem_samples(raw_payload)
     if limit is not None and limit > 0:
         samples = samples[:limit]
 
     total_questions = count_langmem_questions(dataset_file, limit=limit)
+    _langmem_log(f"retrieve total_questions={total_questions}")
     existing_map = load_existing_result_map(out_file)
     retrieved_rows = load_existing_results(out_file)
     pbar = tqdm(total=total_questions, desc="locomo/retrieve/langmem", unit="q")
@@ -285,16 +332,22 @@ def retrieve_langmem_dataset(
 
             if not pending_questions:
                 continue
+            _langmem_log(
+                f"sample start sample_id={sample_id} pending_questions={len(pending_questions)} total_questions={len(valid_questions)}"
+            )
 
             speakers = _ordered_speakers(chat_history)
             if len(speakers) != 2:
+                _langmem_log(f"sample skip sample_id={sample_id} reason=invalid_speakers count={len(speakers)}")
                 for _ in pending_questions:
                     pbar.update(1)
                 continue
 
             speaker_1_name, speaker_2_name = speakers[0], speakers[1]
+            _langmem_log(f"sample agents_build start sample_id={sample_id} speakers={speaker_1_name}|{speaker_2_name}")
             speaker_1_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
             speaker_2_agent = _build_agent(model_name=model_name, embedding_model_name=embedding_model_name)
+            _langmem_log(f"sample agents_build done sample_id={sample_id}")
             _load_agent_memories(
                 speaker_1_agent,
                 output_dir=output_dir,
@@ -309,6 +362,7 @@ def retrieve_langmem_dataset(
                 speaker_name=speaker_2_name,
                 thread_id=f"langmem-{sample_id}-speaker-2",
             )
+            _langmem_log(f"sample memory_load done sample_id={sample_id}")
 
             for qa_idx, question_item in enumerate(valid_questions):
                 question = str(question_item.get("question", "")).strip()
@@ -332,7 +386,7 @@ def retrieve_langmem_dataset(
                     "sample_id": sample_id,
                     "qa_id": qa_id,
                     "q": question,
-                    "answer": question_item.get("answer"),
+                    "answer": resolve_qa_answer(question_item),
                     "category": coerce_category(question_item.get("category")),
                     "method": "langmem",
                     "d": [speaker_1_memories, speaker_2_memories],
@@ -359,6 +413,7 @@ def retrieve_langmem_dataset(
                     ),
                 )
                 pbar.update(1)
+            _langmem_log(f"sample done sample_id={sample_id}")
     finally:
         pbar.close()
 
@@ -371,4 +426,5 @@ def retrieve_langmem_dataset(
         elapsed_seconds=time.perf_counter() - started_at,
     )
     safe_write_json(out_file, payload)
+    _langmem_log(f"retrieve done out_file={out_file} elapsed={round(time.perf_counter() - started_at, 3)}s")
     return payload

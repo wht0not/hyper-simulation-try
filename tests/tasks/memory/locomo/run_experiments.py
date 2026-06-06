@@ -37,6 +37,8 @@ from utils.utils import (
     retrieved_output_path,
 )
 
+PRE_ANSWER_MODEL_NAME = "qwen3.5:9b"
+
 
 def _count_payload_rows(path_like: str | Path) -> int:
     return len(load_payload_rows(Path(path_like)))
@@ -124,7 +126,9 @@ def run_pipeline(
     force_rebuild: bool = False,
     answer_batch_size: int = 1,
     judge_max_workers: int = 4,
-    llm_judge_repeat: int = 5,
+    llm_judge_repeat: int = 1,
+    amem_retrieve_k: int = 10,
+    memorybank_retrieve_k: int = 5,
 ) -> dict[str, Any]:
     source_path = dataset_path if method in {"context", "langmem", "amem", "memorybank"} else instances_root
     effective_output_dir = output_dir
@@ -147,7 +151,7 @@ def run_pipeline(
 
         build_payload = build_hypergraphs_from_dataset(
             dataset_path=dataset_path,
-            output_dir=instances_root,
+            instances_root=instances_root,
             batch_size=batch_size,
             force_rebuild=force_rebuild,
         )
@@ -212,6 +216,9 @@ def run_pipeline(
     )
 
     compose_input_path = dataset_path
+    pre_answer_model_name = (
+        PRE_ANSWER_MODEL_NAME if method in {"langmem", "amem", "memorybank"} else model_name
+    )
     if method in {"langmem", "amem", "memorybank"} and stage in {"memory", "all"}:
         if method == "langmem":
             from method.langmem.memory import build_langmem_memory_dataset
@@ -219,7 +226,7 @@ def run_pipeline(
             memory_payload = build_langmem_memory_dataset(
                 dataset_path=dataset_path,
                 output_dir=output_dir,
-                model_name=model_name,
+                model_name=pre_answer_model_name,
                 limit=limit,
             )
         elif method == "amem":
@@ -228,7 +235,7 @@ def run_pipeline(
             memory_payload = build_amem_memory_dataset(
                 dataset_path=dataset_path,
                 output_dir=output_dir,
-                model_name=model_name,
+                model_name=pre_answer_model_name,
                 limit=limit,
             )
         else:
@@ -237,7 +244,7 @@ def run_pipeline(
             memory_payload = build_memorybank_memory_dataset(
                 dataset_path=dataset_path,
                 output_dir=output_dir,
-                model_name=model_name,
+                model_name=pre_answer_model_name,
                 limit=limit,
             )
 
@@ -261,8 +268,9 @@ def run_pipeline(
                 retrieval_payload = retrieve_langmem_dataset(
                     dataset_path=dataset_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_memory_build=(memory_payload is not None),
                 )
             elif method == "amem":
                 from method.amem.retrieval import retrieve_amem_dataset
@@ -270,8 +278,10 @@ def run_pipeline(
                 retrieval_payload = retrieve_amem_dataset(
                     dataset_path=dataset_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_memory_build=(memory_payload is not None),
+                    retrieve_k=amem_retrieve_k,
                 )
             else:
                 from method.memorybank.retrieval import retrieve_memorybank_dataset
@@ -279,8 +289,10 @@ def run_pipeline(
                 retrieval_payload = retrieve_memorybank_dataset(
                     dataset_path=dataset_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_memory_build=(memory_payload is not None),
+                    retrieve_k=memorybank_retrieve_k,
                 )
             compose_input_path = str(retrieval_payload["summary"]["retrieved_file"])
 
@@ -312,8 +324,9 @@ def run_pipeline(
                 compose_payload = prepare_langmem_dataset(
                     dataset_path=compose_input_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_retrieve=(method == "langmem" and compose_input_path == default_retrieved_path),
                 )
             elif method == "amem":
                 from method.amem.compose import prepare_amem_dataset
@@ -321,8 +334,10 @@ def run_pipeline(
                 compose_payload = prepare_amem_dataset(
                     dataset_path=compose_input_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_retrieve=(method == "amem" and compose_input_path == default_retrieved_path),
+                    retrieve_k=amem_retrieve_k,
                 )
             elif method == "memorybank":
                 from method.memorybank.compose import prepare_memorybank_dataset
@@ -330,8 +345,10 @@ def run_pipeline(
                 compose_payload = prepare_memorybank_dataset(
                     dataset_path=compose_input_path,
                     output_dir=output_dir,
-                    model_name=model_name,
+                    model_name=pre_answer_model_name,
                     limit=limit,
+                    skip_retrieve=(method == "memorybank" and compose_input_path == default_retrieved_path),
+                    retrieve_k=memorybank_retrieve_k,
                 )
             else:
                 from method.hyper_simulation.compose import prepare_hypersim_instances
@@ -399,8 +416,10 @@ def main() -> None:
     parser.add_argument("--force-rebuild", action="store_true")
     parser.add_argument("--answer-batch-size", type=int, default=1)
     parser.add_argument("--judge-max-workers", type=int, default=4)
-    parser.add_argument("--llm-judge-repeat", type=int, default=5)
+    parser.add_argument("--llm-judge-repeat", type=int, default=1)
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--amem-retrieve-k", type=int, default=10)
+    parser.add_argument("--memorybank-retrieve-k", type=int, default=5)
     args = parser.parse_args()
 
     payload = run_pipeline(
@@ -419,6 +438,8 @@ def main() -> None:
         answer_batch_size=args.answer_batch_size,
         judge_max_workers=args.judge_max_workers,
         llm_judge_repeat=args.llm_judge_repeat,
+        amem_retrieve_k=args.amem_retrieve_k,
+        memorybank_retrieve_k=args.memorybank_retrieve_k,
     )
     # print(json.dumps(payload, indent=2, ensure_ascii=False))
 

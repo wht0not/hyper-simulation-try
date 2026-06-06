@@ -22,7 +22,7 @@ FORCE_REBUILD="${FORCE_REBUILD:-0}"
 
 # 控制阶段
 RUN_BASE_ALL="${RUN_BASE_ALL:-1}"
-RUN_HYPER_FROM_RETRIEVAL="${RUN_HYPER_FROM_RETRIEVAL:-0}"
+RUN_HYPER_FROM_RETRIEVAL="${RUN_HYPER_FROM_RETRIEVAL:-1}"
 
 run_simulation_pipeline() {
   pixi run -e simulation python "$LOCOMO_ROOT/run_experiments.py" "$@"
@@ -88,19 +88,22 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
     --limit "$LIMIT"
 
-  echo "[A2] langmem all -> data/langmem"
-  run_simulation_pipeline \
-    --method langmem \
-    --stage all \
-    --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
-    --output-dir "$DATA_ROOT/langmem" \
-    --model-name "$MODEL_NAME" \
-    --answer-batch-size "$ANSWER_BATCH_SIZE" \
-    --judge-max-workers "$JUDGE_MAX_WORKERS" \
-    --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
-    --limit "$LIMIT"
+   echo "[A2] langmem all -> data/langmem"
+   LANGMEM_DEBUG_LOG=1
+   run_simulation_pipeline \
+     --method langmem \
+     --stage all \
+     --dataset-path "$RETRIEVAL_SOURCE_DATASET" \
+     --output-dir "$DATA_ROOT/langmem" \
+     --model-name "$MODEL_NAME" \
+     --answer-batch-size "$ANSWER_BATCH_SIZE" \
+     --judge-max-workers "$JUDGE_MAX_WORKERS" \
+     --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
+     --limit "$LIMIT"
 
   echo "[A3] amem all -> data/amem"
+  # export AMEM_DEBUG_LOG=1
+  # export AMEM_DEBUG_SLOW_MS=2000
   run_simulation_pipeline \
     --method amem \
     --stage all \
@@ -171,13 +174,12 @@ if [[ "$RUN_BASE_ALL" == "1" ]]; then
       --llm-judge-repeat "$LLM_JUDGE_REPEAT" \
       --limit "$LIMIT"
   done
-
 fi
 
 if [[ "$RUN_HYPER_FROM_RETRIEVAL" == "1" ]]; then
   echo "=== [B] retrieval -> hypergraph -> hyper_simulation(all) ==="
-# langmem amem
-  for method in memorybank langmem amem; do
+# langmem
+  for method in memorybank amem; do
     echo "[B] ${method} retrieved -> hypergraph -> hypersim all"
     method_output_dir="$DATA_ROOT/$method"
     retrieved_file="$(ensure_retrieved_file "$method" "$method_output_dir" "$RETRIEVAL_SOURCE_DATASET")" || continue

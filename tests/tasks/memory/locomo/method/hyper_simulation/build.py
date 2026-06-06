@@ -17,6 +17,7 @@ Output layout:
 import json
 import logging
 import hashlib
+import os
 from argparse import ArgumentParser
 from pathlib import Path
 import time
@@ -37,6 +38,45 @@ logger = logging.getLogger(__name__)
 local_model_path = "/home/vincent/.cache/huggingface/hub/models--biu-nlp--lingmess-coref/snapshots/fa5d8a827a09388d03adbe9e800c7d8c509c3935"
 METHOD_NAME = "hyper_simulation"
 QUERY_DIRNAME = "query"
+LOW_D_BYPASS_THRESHOLD = 3
+
+
+def _coerce_category(value: Any) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return -1
+
+
+def _category_filter_env(name: str = "HYPERSIM_ALLOWED_CATEGORIES") -> set[int] | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    tokens = [token.strip() for token in str(raw).split(",")]
+    categories: set[int] = set()
+    for token in tokens:
+        if not token:
+            continue
+        try:
+            categories.add(int(token))
+        except Exception:
+            continue
+    return categories or None
+
+
+def _resolve_entry_answer(entry: dict[str, Any]) -> Any:
+    category = _coerce_category(entry.get("category"))
+    answer = entry.get("answer")
+    adversarial_answer = entry.get("adversarial_answer")
+    if category == 5:
+        if adversarial_answer is not None and str(adversarial_answer).strip():
+            return adversarial_answer
+        return answer
+    if answer is not None:
+        return answer
+    if adversarial_answer is not None and str(adversarial_answer).strip():
+        return adversarial_answer
+    return answer
 
 
 def locomo_root_from_instances_root(instances_root: str | Path) -> Path:
@@ -54,6 +94,54 @@ def shared_query_output_dir(instances_root: str | Path) -> Path:
 def query_key_from_question(question: str) -> str:
     normalized = " ".join(str(question or "").strip().split())
     return hashlib.sha1(normalized.encode("utf-8")).hexdigest()
+
+
+def _entry_instance_id(sample_id: str, qa_id: str, question: str) -> str:
+    stable_id = f"{str(sample_id).strip()}::{str(qa_id).strip()}::{str(question).strip()}"
+    return generate_instance_id(stable_id)
+
+
+def _normalize_hyper_items(entry: dict[str, Any]) -> list[dict[str, Any]]:
+    raw_items = entry.get("hyper_d_items")
+    if not isinstance(raw_items, list):
+        raw_items = entry.get("hyper_d")
+    if not isinstance(raw_items, list):
+        raw_items = entry.get("d", [])
+    if not isinstance(raw_items, list):
+        raw_items = [raw_items]
+
+    normalized_items: list[dict[str, Any]] = []
+    for idx, item in enumerate(raw_items):
+        if isinstance(item, dict):
+            text = str(item.get("text", item.get("memory", ""))).strip()
+            if not text:
+                continue
+            normalized_items.append(
+                {
+                    "index": idx,
+                    "text": text,
+                    "speaker_tag": str(item.get("speaker_tag", "")).strip(),
+                    "speaker_name": str(item.get("speaker_name", "")).strip(),
+                }
+            )
+            continue
+        text = str(item).strip()
+        if not text:
+            continue
+        normalized_items.append({"index": idx, "text": text, "speaker_tag": "", "speaker_name": ""})
+    return normalized_items
+
+
+def _compact_source_entry(entry: dict[str, Any], hyper_items: list[dict[str, Any]]) -> dict[str, Any]:
+    excluded = {
+        "prompt",
+        "prediction",
+        "raw_prediction",
+        "metrics",
+    }
+    compact = {key: value for key, value in entry.items() if key not in excluded}
+    compact["hyper_d_items"] = hyper_items
+    return compact
 
 
 def load_entries_for_build(dataset_path: str | Path) -> tuple[Path, list[dict[str, Any]]]:
@@ -160,44 +248,62 @@ def _prepare_tasks(
     tasks_data: list[tuple[Path, int, str]] = []
     sample_metadata: dict[str, dict[str, Any]] = {}
     seen_query_keys: set[str] = set()
+    allowed_categories = _category_filter_env()
 
     for entry in entries:
+        category = _coerce_category(entry.get("category"))
+        if category == 5:
+            continue
+        if allowed_categories is not None and category not in allowed_categories:
+            continue
         sample_id = str(entry.get("sample_id", ""))
         qa_id = str(entry.get("qa_id", ""))
         q = str(entry.get("q", "")).strip()
         query_key = query_key_from_question(q)
-        d_list = entry.get("d", [])
+        hyper_items = _normalize_hyper_items(entry)
         d_start = str(entry.get("d_start", "")).strip()
+        source_method = str(entry.get("source_method", entry.get("method", ""))).strip() or "context"
+        source_entry = _compact_source_entry(entry, hyper_items)
+        low_d_bypass = len(hyper_items) <= LOW_D_BYPASS_THRESHOLD
 
-        if not isinstance(d_list, list):
-            d_list = [str(d_list)]
-        if not q or not d_list:
+        if not q or not hyper_items:
             continue
 
-        instance_id = generate_instance_id(sample_id)
+        instance_id = _entry_instance_id(sample_id, qa_id, q)
         instance_dir = instances_root / instance_id
 
         if instance_id not in sample_metadata:
             sample_metadata[instance_id] = {
                 "sample_id": sample_id,
+                "qa_id": qa_id,
+                "question": q,
                 "d_start": d_start,
+                "source_method": source_method,
+                "low_d_bypass": low_d_bypass,
+                "hyper_items": hyper_items,
                 "qa_list": [],
             }
-            for d_idx, d_text in enumerate(d_list):
-                full_chunk = f"{d_text}"
-                if not force_rebuild and instance_dir.exists() and (instance_dir / f"data_hypergraph{d_idx}.pkl").exists():
-                    continue
-                tasks_data.append((instance_dir, d_idx, full_chunk))
+            if not low_d_bypass:
+                for d_idx, item in enumerate(hyper_items):
+                    full_chunk = str(item.get("text", "")).strip()
+                    if not full_chunk:
+                        continue
+                    if not force_rebuild and instance_dir.exists() and (instance_dir / f"data_hypergraph{d_idx}.pkl").exists():
+                        continue
+                    tasks_data.append((instance_dir, d_idx, full_chunk))
 
         sample_metadata[instance_id]["qa_list"].append(
             {
                 "qa_id": qa_id,
-                "category": entry.get("category"),
+                "category": category,
                 "question": q,
-                "answer": entry.get("answer"),
+                "answer": _resolve_entry_answer(entry),
+                "source_entry": source_entry,
             }
         )
 
+        if low_d_bypass:
+            continue
         if query_key in seen_query_keys:
             continue
         if not force_rebuild and (query_output_dir / f"{query_key}.pkl").exists():
@@ -220,7 +326,7 @@ def build_all_hypergraphs_gpu_batch(
     instances_root: Path,
     batch_size: int = 16,
     force_rebuild: bool = False,
-) -> None:
+) -> dict[str, Any]:
     instances_root.mkdir(parents=True, exist_ok=True)
     query_output_dir = shared_query_output_dir(instances_root)
     query_output_dir.mkdir(parents=True, exist_ok=True)
@@ -230,6 +336,7 @@ def build_all_hypergraphs_gpu_batch(
         query_output_dir,
         force_rebuild=force_rebuild,
     )
+    hypergraph_build_elapsed_seconds = 0.0
 
     logger.info(f"Processing {len(tasks_query)} queries and {len(tasks_data)} data chunks in batch...")
 
@@ -239,10 +346,14 @@ def build_all_hypergraphs_gpu_batch(
             {"text": q, "meta": {"instance_dir": instance_dir, "query_key": query_key}}
             for instance_dir, query_key, q in tasks_query
         ]
-        q_hgs_iter = batch_text_to_hypergraph(
-            nlp, q_texts_with_meta, batch_size=batch_size, is_query=True
+        query_build_started_at = time.perf_counter()
+        q_hgs = list(
+            batch_text_to_hypergraph(
+                nlp, q_texts_with_meta, batch_size=batch_size, is_query=True
+            )
         )
-        for meta, hg in q_hgs_iter:
+        hypergraph_build_elapsed_seconds += max(0.0, time.perf_counter() - query_build_started_at)
+        for meta, hg in q_hgs:
             if hg is not None:
                 query_key = meta["query_key"]
                 hg.save(str(query_output_dir / f"{query_key}.pkl"))
@@ -257,15 +368,22 @@ def build_all_hypergraphs_gpu_batch(
                 {"text": txt, "meta": {"instance_dir": instance_dir, "d_idx": d_idx}}
                 for instance_dir, d_idx, txt in sub_tasks
             ]
-            d_hgs_iter = batch_text_to_hypergraph(
-                nlp, d_texts_with_meta, batch_size=batch_size, is_query=False
+            data_build_started_at = time.perf_counter()
+            d_hgs = list(
+                batch_text_to_hypergraph(
+                    nlp, d_texts_with_meta, batch_size=batch_size, is_query=False
+                )
             )
-            for meta, hg in d_hgs_iter:
+            hypergraph_build_elapsed_seconds += max(0.0, time.perf_counter() - data_build_started_at)
+            for meta, hg in d_hgs:
                 if hg is not None:
                     instance_dir = meta["instance_dir"]
                     d_idx = meta["d_idx"]
                     hg.save(str(instance_dir / f"data_hypergraph{d_idx}.pkl"))
             logger.info(f"Finished {min(i+chunk_size, len(tasks_data))} / {len(tasks_data)} data chunks")
+    return {
+        "hypergraph_build_elapsed_seconds": round(hypergraph_build_elapsed_seconds, 4),
+    }
 
 
 def build_all_hypergraphs_single(
@@ -311,12 +429,24 @@ def build_hypergraphs_from_dataset(
     dataset_file, entries = load_entries_for_build(dataset_path)
     instances_root_path = Path(instances_root)
     nlp = setup_gpu_nlp()
-    build_all_hypergraphs_gpu_batch(
+    build_stats = build_all_hypergraphs_gpu_batch(
         nlp,
         entries,
         instances_root_path,
         batch_size=batch_size,
         force_rebuild=force_rebuild,
+    )
+    hypergraph_build_elapsed_seconds = float(build_stats.get("hypergraph_build_elapsed_seconds", 0.0))
+    summary_file = instances_root_path / "summary.json"
+    summary_file.write_text(
+        json.dumps(
+            {
+                "hypergraph_build_elapsed_seconds": hypergraph_build_elapsed_seconds,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
     return {
@@ -330,6 +460,8 @@ def build_hypergraphs_from_dataset(
             "batch_size": batch_size,
             "force_rebuild": force_rebuild,
             "total_entries": len(entries),
+            "hypergraph_build_elapsed_seconds": hypergraph_build_elapsed_seconds,
+            "summary_file": str(summary_file),
             "elapsed_seconds": round(time.perf_counter() - started_at, 4),
         }
     }
