@@ -64,6 +64,17 @@ def _category_filter_env(name: str = "HYPERSIM_ALLOWED_CATEGORIES") -> set[int] 
     return categories or None
 
 
+def _max_rows_env(name: str = "LOCOMO_MAX_ROWS") -> int | None:
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        value = int(raw)
+    except Exception:
+        return None
+    return value if value > 0 else None
+
+
 def _resolve_entry_answer(entry: dict[str, Any]) -> Any:
     category = _coerce_category(entry.get("category"))
     answer = entry.get("answer")
@@ -249,6 +260,8 @@ def _prepare_tasks(
     sample_metadata: dict[str, dict[str, Any]] = {}
     seen_query_keys: set[str] = set()
     allowed_categories = _category_filter_env()
+    max_rows = _max_rows_env()
+    accepted_rows = 0
 
     for entry in entries:
         category = _coerce_category(entry.get("category"))
@@ -268,6 +281,7 @@ def _prepare_tasks(
 
         if not q or not hyper_items:
             continue
+        accepted_rows += 1
 
         instance_id = _entry_instance_id(sample_id, qa_id, q)
         instance_dir = instances_root / instance_id
@@ -303,13 +317,21 @@ def _prepare_tasks(
         )
 
         if low_d_bypass:
+            if max_rows is not None and accepted_rows >= max_rows:
+                break
             continue
         if query_key in seen_query_keys:
+            if max_rows is not None and accepted_rows >= max_rows:
+                break
             continue
         if not force_rebuild and (query_output_dir / f"{query_key}.pkl").exists():
+            if max_rows is not None and accepted_rows >= max_rows:
+                break
             continue
         seen_query_keys.add(query_key)
         tasks_query.append((instance_dir, query_key, q))
+        if max_rows is not None and accepted_rows >= max_rows:
+            break
 
     for instance_id, meta in sample_metadata.items():
         instance_dir = instances_root / instance_id

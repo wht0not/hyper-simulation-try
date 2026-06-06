@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,54 @@ def entry_key(entry: dict[str, Any]) -> str:
     return f"{sample_id}::{qa_id}" if sample_id and qa_id else q
 
 
+def _category_filter_env(name: str = "LOCOMO_ALLOWED_CATEGORIES") -> set[int] | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    categories: set[int] = set()
+    for token in str(raw).split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            categories.add(int(token))
+        except Exception:
+            continue
+    return categories or None
+
+
+def _positive_int_env(name: str) -> int | None:
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return None
+    try:
+        value = int(raw)
+    except Exception:
+        return None
+    return value if value > 0 else None
+
+
+def filtered_row_limit(limit: int | None = None) -> int | None:
+    max_rows = _positive_int_env("LOCOMO_MAX_ROWS")
+    candidates = [value for value in (limit, max_rows) if value is not None and value > 0]
+    return min(candidates) if candidates else None
+
+
+def filter_entry_rows(rows: list[dict[str, Any]], limit: int | None = None) -> list[dict[str, Any]]:
+    allowed_categories = _category_filter_env()
+    row_limit = filtered_row_limit(limit)
+    filtered_rows: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if allowed_categories is not None and coerce_category(row.get("category", -1)) not in allowed_categories:
+            continue
+        filtered_rows.append(row)
+        if row_limit is not None and len(filtered_rows) >= row_limit:
+            break
+    return filtered_rows
+
+
 def load_entries(dataset_path: Path, limit: int | None = None) -> list[dict[str, Any]]:
     if not dataset_path.exists():
         return []
@@ -38,9 +87,50 @@ def load_entries(dataset_path: Path, limit: int | None = None) -> list[dict[str,
     if not isinstance(entries, list):
         return []
     valid_entries = [one for one in entries if isinstance(one, dict)]
+    return filter_entry_rows(valid_entries, limit=limit)
+
+
+def iter_filtered_sample_questions(
+    payload: Any,
+    limit: int | None = None,
+) -> list[tuple[str, dict[str, Any], list[dict[str, Any]]]]:
+    sample_items: list[tuple[str, dict[str, Any]]] = []
+    if isinstance(payload, dict):
+        sample_items = [(str(key), value) for key, value in payload.items() if isinstance(value, dict)]
+    elif isinstance(payload, list):
+        sample_items = [
+            (str(value.get("sample_id", idx)), value)
+            for idx, value in enumerate(payload)
+            if isinstance(value, dict)
+        ]
     if limit is not None and limit > 0:
-        return valid_entries[:limit]
-    return valid_entries
+        sample_items = sample_items[:limit]
+
+    allowed_categories = _category_filter_env()
+    row_limit = filtered_row_limit()
+    filtered_samples: list[tuple[str, dict[str, Any], list[dict[str, Any]]]] = []
+    total_rows = 0
+
+    for sample_key, sample in sample_items:
+        questions = sample.get("question", sample.get("qa", []))
+        if not isinstance(questions, list):
+            continue
+        kept_questions: list[dict[str, Any]] = []
+        for question in questions:
+            if not isinstance(question, dict):
+                continue
+            if allowed_categories is not None and coerce_category(question.get("category", -1)) not in allowed_categories:
+                continue
+            kept_questions.append(question)
+            total_rows += 1
+            if row_limit is not None and total_rows >= row_limit:
+                break
+        if kept_questions:
+            filtered_samples.append((sample_key, sample, kept_questions))
+        if row_limit is not None and total_rows >= row_limit:
+            break
+
+    return filtered_samples
 
 
 def load_payload_rows(path: Path) -> list[dict[str, Any]]:

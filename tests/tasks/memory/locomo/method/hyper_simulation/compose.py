@@ -22,6 +22,7 @@ from prompt.memorybank import build_hyper_memorybank_answer_prompt
 from utils.utils import (
     coerce_category,
     entry_key,
+    filtered_row_limit,
     load_existing_results,
     prepared_output_path,
     safe_write_json,
@@ -741,12 +742,15 @@ def prepare_hypersim_instances(
     instances_dir = Path(instances_root)
     out_file = prepared_output_path(output_dir, "hyper_simulation", instances_dir)
     allowed_categories = _category_filter_env()
+    row_limit = filtered_row_limit()
     existing_rows = [
         sanitize_hypersim_row(row)
         for row in load_existing_results(out_file)
         if coerce_category(row.get("category", -1)) != 5
         and (allowed_categories is None or coerce_category(row.get("category", -1)) in allowed_categories)
     ]
+    if row_limit is not None:
+        existing_rows = existing_rows[:row_limit]
     existing_map = {entry_key(row): row for row in existing_rows if entry_key(row)}
     if not instances_dir.exists():
         payload = {
@@ -769,10 +773,14 @@ def prepare_hypersim_instances(
     checkpoint_every = max(1, int(checkpoint_every))
     pending_writes = 0
     for instance_dir in tqdm(dirs, desc="locomo/compose/hyper_simulation", unit="inst"):
+        if row_limit is not None and len(prepared_rows) >= row_limit:
+            break
         for prepared in compose_hypersim_instance(instances_dir, instance_dir, existing_map=existing_map):
             prepared_rows.append(prepared)
             existing_map[entry_key(prepared)] = prepared
             pending_writes += 1
+            if row_limit is not None and len(prepared_rows) >= row_limit:
+                break
             if pending_writes >= checkpoint_every:
                 safe_write_json(
                     out_file,

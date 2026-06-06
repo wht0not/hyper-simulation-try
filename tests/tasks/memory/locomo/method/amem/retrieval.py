@@ -15,6 +15,7 @@ from utils.qa_utils import resolve_qa_answer
 from utils.utils import (
     coerce_category,
     entry_key,
+    iter_filtered_sample_questions,
     load_entries,
     load_existing_result_map,
     load_existing_results,
@@ -44,15 +45,7 @@ def count_amem_questions(dataset_path: str | Path, limit: int | None = None) -> 
         payload = json.loads(dataset_file.read_text(encoding="utf-8"))
     except Exception:
         return 0
-    samples = _iter_amem_samples(payload)
-    if limit is not None and limit > 0:
-        samples = samples[:limit]
-    total = 0
-    for _, sample in samples:
-        questions = sample.get("question", sample.get("qa", []))
-        if isinstance(questions, list):
-            total += len([row for row in questions if isinstance(row, dict)])
-    return total
+    return sum(len(questions) for _, _, questions in iter_filtered_sample_questions(payload, limit=limit))
 
 
 def _retrieved_payload(
@@ -278,9 +271,7 @@ def retrieve_amem_dataset(
             limit=limit,
         )
 
-    samples = _iter_amem_samples(raw_payload)
-    if limit is not None and limit > 0:
-        samples = samples[:limit]
+    samples = iter_filtered_sample_questions(raw_payload, limit=limit)
 
     total_questions = count_amem_questions(dataset_file, limit=limit)
     existing_map = load_existing_result_map(out_file)
@@ -288,16 +279,14 @@ def retrieve_amem_dataset(
     pbar = tqdm(total=total_questions, desc="locomo/retrieve/amem", unit="q")
 
     try:
-        for sample_key, sample in samples:
+        for sample_key, sample, filtered_questions in samples:
             chat_history = sample.get("conversation", [])
-            questions = sample.get("question", sample.get("qa", []))
-            if not isinstance(chat_history, list) or not isinstance(questions, list):
+            if not isinstance(chat_history, list):
                 continue
 
             sample_id = str(sample.get("sample_id", sample_key)).strip() or str(sample_key)
-            valid_questions = [row for row in questions if isinstance(row, dict)]
             pending_questions: list[dict[str, Any]] = []
-            for qa_idx, question_item in enumerate(valid_questions):
+            for qa_idx, question_item in enumerate(filtered_questions):
                 row_stub = {
                     "sample_id": sample_id,
                     "qa_id": str(question_item.get("qa_id", qa_idx)),
@@ -321,7 +310,7 @@ def retrieve_amem_dataset(
             speaker_1_system = load_amem_memory_system(output_dir, sample_id, "speaker_1", speaker_1_name, model_name)
             speaker_2_system = load_amem_memory_system(output_dir, sample_id, "speaker_2", speaker_2_name, model_name)
 
-            for qa_idx, question_item in enumerate(valid_questions):
+            for qa_idx, question_item in enumerate(filtered_questions):
                 question = str(question_item.get("question", "")).strip()
                 if not question:
                     pbar.update(1)
