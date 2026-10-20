@@ -13,7 +13,7 @@ from tqdm import tqdm
 from hyper_simulation.baselines.CDIT import judge_similarity_batch
 from hyper_simulation.baselines.contradoc import judge_contradiction_batch
 from hyper_simulation.utils.chat_completion import get_invoke
-from hyper_simulation.question_answer.vmdit.metrics import (
+from hyper_simulation.utils.evaluation import (
 	exact_match_score,
 	match,
 	metric_max_over_ground_truths,

@@ -21,7 +21,7 @@ from hyper_simulation.prompt.multihop import (
 	MULTIHOP_QA_HYPER_FINAL,
 	MULTIHOP_QA_HYPER_SUB,
 )
-from hyper_simulation.question_answer.vmdit.metrics import (
+from hyper_simulation.utils.evaluation import (
 	exact_match_score,
 	metric_max_over_ground_truths,
 	qa_f1_score,

@@ -12,7 +12,7 @@ from hyper_simulation.component.hyper_simulation import compute_hyper_simulation
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph, Vertex
 from hyper_simulation.hypergraph.union import MultiHopFusion
 from hyper_simulation.utils.chat_completion import get_invoke
-from hyper_simulation.question_answer.vmdit.metrics import (
+from hyper_simulation.utils.evaluation import (
 	exact_match_score,
 	match,
 	metric_max_over_ground_truths,

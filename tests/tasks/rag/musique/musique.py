@@ -17,7 +17,7 @@ from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph
 from hyper_simulation.hypergraph.union import MultiHopFusion
 from hyper_simulation.utils.chat_completion import get_invoke
 from hyper_simulation.prompt.musique import MUSIQUE_QA_HYPER
-from hyper_simulation.question_answer.vmdit.metrics import (
+from hyper_simulation.utils.evaluation import (
 	exact_match_score,
 	metric_max_over_ground_truths,
 	qa_f1_score,

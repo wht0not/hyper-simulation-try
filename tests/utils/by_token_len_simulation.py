@@ -13,7 +13,7 @@ from spacy.language import Language
 from tqdm import tqdm
 
 from hyper_simulation.query_instance import build_query_instance_for_task
-from hyper_simulation.question_answer.utils.load_data import load_data
+from hyper_simulation.utils.evaluation import load_data
 
 from refine_hypergraph import load_task_dataset
 

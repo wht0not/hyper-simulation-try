@@ -33,7 +33,7 @@ from hyper_simulation.component.build_hypergraph import (
 	clean_text_for_spacy,
 )
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph
-from hyper_simulation.question_answer.utils.load_data import load_data
+from hyper_simulation.utils.evaluation import load_data
 
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 # contradoc.py
 from hyper_simulation.baselines.contradoc import judge_contradiction_batch
-from hyper_simulation.question_answer.rag_no_retrival import load_data
+# DEPRECATED: load_data removed with question_answer module
 from langchain_ollama import ChatOllama
 
 # ==========================================

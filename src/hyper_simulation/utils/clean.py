@@ -170,7 +170,7 @@ def fix_arc_baseline_metrics():
     """
     import jsonlines
     from pathlib import Path
-    from hyper_simulation.question_answer.utils.post_answer import evaluate_answer
+    from hyper_simulation.utils.evaluation import evaluate_answer
     
     # 1. 尝试从原有的评测集或修复后的数据里加载标准答案映射
     answer_map = {}

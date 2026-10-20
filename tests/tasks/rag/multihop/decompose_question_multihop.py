@@ -8,7 +8,8 @@ from typing import Any
 from tqdm import tqdm
 
 from hyper_simulation.hypergraph.hypergraph import Hypergraph as LocalHypergraph
-from hyper_simulation.question_answer.decompose import (
+# DEPRECATED: decompose removed with question_answer module
+# from hyper_simulation.question_answer.decompose import (
 	decompose_question_with_nums_batch,
 	mark_vertex_ids_for_subquestions_batch,
 )

@@ -52,7 +52,7 @@ from hyper_simulation.component.build_hypergraph import (
     doc_to_hypergraph,
     clean_text_for_spacy,
 )
-from hyper_simulation.question_answer.utils.load_data import load_data
+from hyper_simulation.utils.evaluation import load_data
 from hyper_simulation.query_instance import build_query_instance_for_task
 
 logger = logging.getLogger(__name__)
